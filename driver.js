@@ -121,24 +121,6 @@ function importPublicKey(keyBytes) {
   return crypto.subtle.importKey("jwk", jwk, {name: "ECDSA", namedCurve: "P-256"}, true, ["verify"])
 }
 
-// function assembleSignedData(appIdBuf, presenceAndCounter, clientData) {
-//   console.log(appIdBuf, clientData);
-//   return Promise.all([
-//     crypto.subtle.digest("SHA-256", appIdBuf),
-//     crypto.subtle.digest("SHA-256", clientData)
-//   ])
-//   .then(function(digests) {
-//     let appParam = new Uint8Array(digests[0]);
-//     let clientParam = new Uint8Array(digests[1]);
-
-//     let signedData = new Uint8Array(32 + 1 + 4 + 32);
-//     appParam.map(function(x, i) { return signedData[0+i] = x });
-//     presenceAndCounter.map(function(x, i) { return signedData[32+i] = x });
-//     clientParam.map(function(x, i) { return signedData[37+i] = x });
-//     return signedData;
-//   });
-// }
-
 function verifySignature(key, data, derSig) {
   if (derSig.byteLength < 70) {
     console.log("bad sig: " + hexEncode(derSig))
@@ -190,7 +172,6 @@ $(document).ready(function() {
   }
 
   state.version = "U2F_V2";
-  state.appId = window.location.origin;
 
   let success = true;
 
@@ -229,6 +210,9 @@ $(document).ready(function() {
       timeout: 60000,  // 1 minute
       excludeList: [] // No excludeList
     };
+    if ($("#rpIdText").val()) {
+      createRequest.rp.id = $("#rpIdText").val();
+    }
     state.createRequest = createRequest;
 
     append("createOut", "Sending request:\n");
@@ -335,9 +319,12 @@ $(document).ready(function() {
     let publicKeyCredentialRequestOptions = {
       challenge: challengeBytes,
       timeout: 60000,
-      rpId: document.origin,
       allowList: [newCredential]
     };
+
+    if ($("#rpIdText").val()) {
+      publicKeyCredentialRequestOptions.rpId = $("#rpIdText").val();
+    }
 
     navigator.credentials.get({publicKey: publicKeyCredentialRequestOptions})
     .then(function(aAssertion) {
