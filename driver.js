@@ -62,7 +62,7 @@ function b64dec(str) {
 }
 
 function deriveAppAndChallengeParam(appId, clientData) {
-  console.log(appId.toString());
+  console.log("AppID string: " + appId.toString());
   var appIdBuf = string2buffer(appId.toString());
   return Promise.all([
     crypto.subtle.digest("SHA-256", appIdBuf),
@@ -215,9 +215,6 @@ $(document).ready(function() {
     }
     state.createRequest = createRequest;
 
-    append("createOut", "Sending request:\n");
-    append("createOut", JSON.stringify(createRequest, null, 2) + "\n\n");
-
     navigator.credentials.create({ publicKey: createRequest })
     .then(function (aNewCredentialInfo) {
       state.createResponse = aNewCredentialInfo
@@ -294,8 +291,10 @@ $(document).ready(function() {
       append("createOut", "Got error:\n");
       append("createOut", aErr.toString() + "\n\n");
       return;
+    }).then(function (){
+      append("createOut", "\n\nRaw request:\n");
+      append("createOut", JSON.stringify(createRequest, null, 2) + "\n\n");
     });
-
   });
 
   $("#getButton").click(function() {
@@ -353,8 +352,14 @@ $(document).ready(function() {
       let rpIdHash = aAssertion.response.authenticatorData.slice(0,32);
 
       // Assemble the signed data and verify the signature
-      return deriveAppAndChallengeParam(clientData.origin, aAssertion.response.clientDataJSON)
+      appId = clientData.origin
+      if ($("#rpIdText").val()) {
+        appId = $("#rpIdText").val();
+      }
+
+      return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON)
       .then(function(aParams) {
+        console.log(clientData.origin, clientData);
         console.log(aParams.appParam, rpIdHash, presenceAndCounter, aParams.challengeParam);
         append("getOut", "ClientData buffer: " + hexEncode(aAssertion.response.clientDataJSON) + "\n\n");
         append("getOut", "ClientDataHash: " + hexEncode(aParams.challengeParam) + "\n\n");
@@ -374,7 +379,9 @@ $(document).ready(function() {
       resultColor("getOut", false);
       append("getOut", "Got error:\n");
       append("getOut", aErr.toString() + "\n\n");
-      return;
+    }).then(function (){
+      append("getOut", "\n\nRaw request:\n");
+      append("getOut", JSON.stringify(publicKeyCredentialRequestOptions, null, 2) + "\n\n");
     });
   });
 });
