@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>WebAuthn checker</title>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+<script type="text/javascript" src="base64.js"></script>
+<script type="text/javascript" src="pkijs/common.js"></script>
+<script type="text/javascript" src="pkijs/asn1.js"></script>
+<script type="text/javascript" src="pkijs/x509_schema.js"></script>
+<script type="text/javascript" src="pkijs/x509_simpl.js"></script>
+<script type="text/javascript" src="driver.js"></script>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  text-align: left;
+  font-size: 10pt;
+  font-family: system, Helvetica, sans-serif;
+}
+
+#container {
+  width: 600px;
+  margin: 0 auto;
+  margin-top: 1em;
+}
+
+#error {
+  font-size: 150%;
+  font-weight: bold;
+  text-align: center;
+}
+
+.row {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+.row ol {
+  margin-left: 2em;
+}
+
+.box {
+  border: 1px solid grey;
+  padding: 3px;
+  margin-bottom: 10px;
+}
+.subtitle {
+  font-style: italic;
+}
+
+button {
+  background-color: black;
+  color: white;
+  border: 1px solid black;
+  padding: 1ex;
+  width: 100%;
+}
+
+button:active {
+  background-color: #303;
+}
+
+input {
+  margin-bottom: 20px;
+}
+
+pre {
+  width: 560px;
+  height: 20em;
+  overflow: scroll;
+  background-color: #eee;
+  border: 1px solid #999;
+  margin: 1em 0;
+}
+
+.inactive {
+  background-color: #999;
+}
+
+.success {
+  background-color: #dfd;
+}
+
+.failure {
+  background-color: #fdd;
+}
+</style>
+</head>
+
+<body>
+<div id="container">
+ <div class="row">
+  <p>To use this to test Web Authentication support in Firefox, do the following:</p>
+  <ol>
+   <li>Open the Firefox advanced preferences in <a href="about:config">about:config</a>.</li>
+   <li>Search for "webauth"</li>
+   <li>Enable (value=True) these two:
+    <ul>
+      <li><tt>security.webauth.webauthn</tt></li>
+      <li><tt>security.webauth.webauthn_enable_softtoken</tt></li>
+    </ul>
+   </li>
+   <li>Reload this page and click buttons!</li>
+  </ol>
+ </div>
+
+ <div class="row">
+  <p id="error"></p>
+
+  <!-- registration -->
+  <div class="box">
+    <button id="createButton">Create Credential</button>
+    <pre id="createOut"></pre>
+  </div>
+
+  <!-- sign -->
+  <div class="box">
+    <button id="getButton">Get Credential</button>
+    <pre id="getOut"></pre>
+  </div>
+
+  <div class="box">
+    <p class="subtitle">Advanced</p>
+    <p>Relying Party ID to use. "<tt>bin.coffee</tt>" and "<tt>webauthn.bin.coffee</tt>" should be the only valid options.</p>
+    <input id="rpIdText" type="text" size="50" value="webauthn.bin.coffee"/>
+  </div>
+
+ </div>
+</div>
+</body>
+</html>
