@@ -352,7 +352,7 @@ $(document).ready(function() {
       let rpIdHash = aAssertion.response.authenticatorData.slice(0,32);
 
       // Assemble the signed data and verify the signature
-      appId = clientData.origin
+      appId = document.domain
       if ($("#rpIdText").val()) {
         appId = $("#rpIdText").val();
       }
