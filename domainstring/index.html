@@ -2,14 +2,13 @@
 <html>
 
 <head>
-<title>WebAuthn checker - W3C WD-05 Mode</title>
+<title>WebAuthn checker - Firefox Attestation Mode</title>
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
 <script type="text/javascript" src="/base64.js"></script>
 <script type="text/javascript" src="/pkijs/common.js"></script>
 <script type="text/javascript" src="/pkijs/asn1.js"></script>
 <script type="text/javascript" src="/pkijs/x509_schema.js"></script>
 <script type="text/javascript" src="/pkijs/x509_simpl.js"></script>
-<script type="text/javascript" src="/cbor.js"></script>
 <script type="text/javascript" src="driver.js"></script>
 <style>
 * {
@@ -94,14 +93,7 @@ pre {
 <body>
 <div id="container">
  <div class="row">
-  <p><strong>This is the W3C attestation mode checker. It's a <big>work-in-progress</big>.</strong> Other checkers available:</p>
-  <ol>
-   <li><a href="/origin">RPID is Origin w/ Firefox attestation mode</a></li>
-   <li><a href="/domainstring">RPID is Domain String w/ Firefox attestation mode</a></li>
-  </ol>
-  <p>This one uses CBOR.</p>
- </div>
- <div class="row">
+  <p><strong>This is the Domain-String, Firefox attestation mode checker, not the W3C U2F mode.</strong></p>
   <p>To use this to test Web Authentication support in Firefox, do the following:</p>
   <ol>
    <li>Open the Firefox advanced preferences in <a href="about:config">about:config</a>.</li>
