@@ -11,10 +11,10 @@ function test(id, test, text) {
   return test;
 }
 
-function testEqual(id, val1, val2) {
+function testEqual(id, val1, val2, msg) {
   let result = (val1 == val2);
   let cmp = (result)? " == " : " != ";
-  return test(id, result, "" + val1 + cmp + val2);
+  return test(id, result, msg + ": " + val1 + cmp + val2);
 }
 
 function resultColor(id, success) {
@@ -94,6 +94,13 @@ function assembleRegistrationSignedData(appParam, challengeParam, keyHandle, pub
   return signedData;
 }
 
+function assemblePublicKeyBytesData(xCoord, yCoord) {
+  let keyBytes = new Uint8Array(65);
+  keyBytes[0] = 0x04;
+  xCoord.map((x, i) => keyBytes[1 + i] = x);
+  yCoord.map((x, i) => keyBytes[33 + i] = x);
+  return keyBytes;
+}
 
 var state = {
   // Raw messages
@@ -163,7 +170,14 @@ function asn1Okay(asn1) {
   return true;
 }
 
-
+// OMG why are we encoding/decoding to get the right type?
+// hexDecode(hexEncode(state.attestationCertDER)) === Uint8Array
+// state.attestationCertDER === Uint8Array
+// but unless we encode/decode, it's ~168 bytes after parsing, whereas it
+// should be ~309 bytes.
+function repairArray(a) {
+  return hexDecode(hexEncode(a))
+}
 
 $(document).ready(function() {
   if (!PublicKeyCredential) {
@@ -218,67 +232,103 @@ $(document).ready(function() {
     navigator.credentials.create({ publicKey: createRequest })
     .then(function (aNewCredentialInfo) {
       state.createResponse = aNewCredentialInfo
-      append("createOut", "Raw response in console.\n");
+      append("createOut", "Note: Raw response in console.\n");
       console.log("Credentials.Create response: ", aNewCredentialInfo);
 
-      if (!testEqual("createOut", aNewCredentialInfo.response.attestationObject[0], 0x05)) {
-        throw "Attestation Object's header byte is incorrect";
+      var attObj = CBOR.decode(aNewCredentialInfo.response.attestationObject.buffer);
+      console.log("Attestation CBOR Object:", attObj);
+      if (!("authData" in attObj && "fmt" in attObj && "attStmt" in attObj)) {
+        throw "Invalid CBOR Attestation Object";
+      }
+      if (!("sig" in attObj.attStmt && "x5c" in attObj.attStmt)) {
+        throw "Invalid CBOR Attestation Statement";
       }
 
-      let clientData = JSON.parse(buffer2string(aNewCredentialInfo.response.clientDataJSON));
-      append("createOut", "Client Data:\n");
-      append("createOut", JSON.stringify(clientData, null, 2) + "\n\n");
+      state.rpIdHash = attObj.authData.slice(0, 32);
+      state.flags = attObj.authData.slice(32, 33);
+      state.counter = attObj.authData.slice(33, 37);
+      state.attData = {}
+      state.attData.aaguid = attObj.authData.slice(37, 53);
+      state.attData.credIdLen = (attObj.authData[53] << 8) + attObj.authData[54];
+      state.attData.credId = attObj.authData.slice(55, 55 + state.attData.credIdLen);
 
-      testEqual("createOut", b64enc(challengeBytes), clientData.challenge);
-      testEqual("createOut", window.location.origin, clientData.origin);
-      if (clientData.hashAlg) {
-        // TODO: Remove this check - Spec changed
-        testEqual("createOut", "S256", clientData.hashAlg);
-        append("createOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
-      } else if (clientData.hashAlgorithm) {
-        testEqual("createOut", "SHA-256", clientData.hashAlgorithm);
-      } else {
-        throw "Unknown spec version: Missing clientData.hashAlgorithm";
+      append("createOut", "\n:: CBOR Attestation Object Data ::\n");
+      append("createOut", "RP ID Hash: " + hexEncode(state.rpIdHash) + "\n");
+      append("createOut", "Counter: " + hexEncode(state.counter) + "\n");
+      append("createOut", "AAGUID: " + hexEncode(state.attData.aaguid) + "\n");
+
+      cborPubKey = attObj.authData.slice(55 + state.attData.credIdLen);
+      var pubkeyObj = CBOR.decode(cborPubKey.buffer);
+      console.log("Public Key CBOR Object:", pubkeyObj);
+      if (!("alg" in pubkeyObj && "x" in pubkeyObj && "y" in pubkeyObj)) {
+        throw "Invalid CBOR Public Key Object";
+      }
+      if (!test("createOut", pubkeyObj.alg == "ES256", "Public Key is ES256, as requested")) {
+        throw "Unexpected public key algorithm";
       }
 
-      let u2fObj = aNewCredentialInfo.response.attestationObject;
+      state.publicKeyBytes = assemblePublicKeyBytesData(pubkeyObj.x, pubkeyObj.y);
 
-      state.publicKeyBytes = u2fObj.subarray(1, 66);
-      let keyHandleLength = u2fObj[66];
-      state.keyHandle = b64enc(u2fObj.subarray(67, 67 + keyHandleLength));
-      state.attestation = new Uint8Array(u2fObj.subarray(67 + keyHandleLength));
-
+      testEqual("createOut", hexEncode(state.attData.credId), hexEncode(aNewCredentialInfo.rawId), "Credential ID from CBOR and Raw ID match");
+      state.keyHandle = aNewCredentialInfo.rawId;
       append("createOut", "Key Handle: " + hexEncode(state.keyHandle) + "\n");
-      append("createOut", "Certificate: " + hexEncode(state.attestation) + "\n");
 
-      let certAsn1 = org.pkijs.fromBER(state.attestation.buffer);
-      if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate is OK")) {
+      /* Decode U2F Attestation Certificates */
+      append("createOut", "\n:: Attestation Certificate Information ::\n");
+      if (attObj.attStmt.x5c.length != 1) {
+        throw "Can't yet handle cert chains != 1 cert long";
+      }
+
+      state.attestationCertDER = attObj.attStmt.x5c[0];
+      append("createOut", "DER-encoded Certificate: " + hexEncode(state.attestationCertDER) + "\n");
+
+      let certAsn1 = org.pkijs.fromBER(repairArray(state.attestationCertDER).buffer);
+      if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate parsed")) {
         throw "Attestation Certificate didn't parse correctly.";
       }
 
-      state.attestationSig = new Uint8Array(state.attestation.slice(certAsn1.offset));
       state.attestationCert = new org.pkijs.simpl.CERT({ schema: certAsn1.result });
       append("createOut", "Attestation Cert\n");
       append("createOut", "Subject: " + state.attestationCert.subject.types_and_values[0].value.value_block.value + "\n");
       append("createOut", "Issuer: " + state.attestationCert.issuer.types_and_values[0].value.value_block.value + "\n");
       append("createOut", "Validity (in millis): " + (state.attestationCert.notAfter.value - state.attestationCert.notBefore.value + "\n"));
 
-      let sigAsn1 = org.pkijs.fromBER(state.attestationSig.buffer);
-      if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature is OK")) {
+      state.attestationSig = attObj.attStmt.sig;
+      let sigAsn1 = org.pkijs.fromBER(repairArray(state.attestationSig).buffer);
+      if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature parsed")) {
         throw "Attestation Signature failed to validate";
       }
 
-      append("createOut", "Attestation Signature\n");
+      append("createOut", "Attestation Signature (by the key in the cert, over the new credential):\n");
       let R = new Uint8Array(sigAsn1.result.value_block.value[0].value_block.value_hex);
       let S = new Uint8Array(sigAsn1.result.value_block.value[1].value_block.value_hex);
-      append("createOut", "R: " + hexEncode(R) + "\n");
-      append("createOut", "S: " + hexEncode(S) + "\n");
+      append("createOut", "R-component: " + hexEncode(R) + "\n");
+      append("createOut", "S-component: " + hexEncode(S) + "\n");
 
-      // Import the public key
+      /* Decode Client Data */
+      append("createOut", "\n:: Client Data Information ::\n");
+      let clientData = JSON.parse(buffer2string(aNewCredentialInfo.response.clientDataJSON));
+      append("createOut", "Client Data object, in full:\n");
+      append("createOut", JSON.stringify(clientData, null, 2) + "\n\n");
+
+      testEqual("createOut", b64enc(challengeBytes), clientData.challenge, "Challenge matches");
+      testEqual("createOut", window.location.origin, clientData.origin, "ClientData origin matches this origin");
+      if (clientData.hashAlg) {
+        // TODO: Remove this check - Spec changed
+        testEqual("createOut", "S256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
+        append("createOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
+      } else if (clientData.hashAlgorithm) {
+        testEqual("createOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
+      } else {
+        throw "Unknown spec version: Missing clientData.hashAlgorithm";
+      }
+
+      /* Import the public key */
       importPublicKey(state.publicKeyBytes)
       .then(function(aKey) {
         state.publicKey = aKey;
-        success = test("createOut", true, "Imported public key");
+        append("createOut", "\n:: Public Key Import ::\n");
+        success = test("createOut", true, "Imported public key successfully");
         resultColor("createOut", success);
       })
       .catch(function(aErr) {
@@ -331,19 +381,19 @@ $(document).ready(function() {
       append("getOut", "Raw response in console.\n");
 
       let clientData = JSON.parse(buffer2string(aAssertion.response.clientDataJSON));
-      testEqual("getOut", clientData.challenge, b64enc(challengeBytes));
-      testEqual("getOut", clientData.origin, window.location.origin);
+      testEqual("getOut", clientData.challenge, b64enc(challengeBytes), "Challenge is identical");
+      testEqual("getOut", clientData.origin, window.location.origin, "Client Data origin matches current origin");
       if (clientData.hashAlg) {
         // TODO: Remove this check - Spec changed
-        testEqual("getOut", "S256", clientData.hashAlg);
+        testEqual("getOut", "S256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
         append("getOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
       } else if (clientData.hashAlgorithm) {
-        testEqual("getOut", "SHA-256", clientData.hashAlgorithm);
+        testEqual("getOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
       } else {
         throw "Unknown spec version: Missing clientData.hashAlgorithm";
       }
 
-      if (!testEqual("getOut", aAssertion.response.signature[0], 0x01)) {
+      if (!testEqual("getOut", aAssertion.response.signature[0], 0x01, "User Presence must be set")) {
         throw "Assertion's user presence byte not set correctly.";
       }
 
