@@ -1,4 +1,6 @@
 var TIMEOUT = 2000; // ms
+const flag_TUP = 0x01;
+const flag_AT = 0x40;
 
 class ResultTracker {
   construct() {
@@ -99,9 +101,8 @@ function b64dec(str) {
   return new Uint8Array(base64js.toByteArray(b64));
 }
 
-function deriveAppAndChallengeParam(appId, clientData) {
-  console.log("AppID string: " + appId.toString());
-  var appIdBuf = string2buffer(appId.toString());
+function deriveAppAndChallengeParam(appId, clientData, attestation) {
+  var appIdBuf = string2buffer(appId);
   return Promise.all([
     crypto.subtle.digest("SHA-256", appIdBuf),
     crypto.subtle.digest("SHA-256", clientData)
@@ -110,14 +111,16 @@ function deriveAppAndChallengeParam(appId, clientData) {
     return {
       appParam: new Uint8Array(digests[0]),
       challengeParam: new Uint8Array(digests[1]),
+      attestation: attestation
     };
   });
 }
 
-function assembleSignedData(appParam, presenceAndCounter, challengeParam) {
+function assembleSignedData(appParam, flags, counter, challengeParam) {
   let signedData = new Uint8Array(32 + 1 + 4 + 32);
   appParam.map((x, i) => signedData[0 + i] = x);
-  presenceAndCounter.map((x, i) => signedData[32 + i] = x);
+  signedData[32] = flags;
+  counter.map((x, i) => signedData[33 + i] = x);
   challengeParam.map((x, i) => signedData[37 + i] = x);
   return signedData;
 }
@@ -158,9 +161,9 @@ var state = {
   keyHandle: null,
 }
 
-function webAuthnDecodeAttestation(aAttestationBuf) {
-  let attObj = CBOR.decode(aAttestationBuf);
-  console.log("Attestation CBOR Object:", attObj);
+function webAuthnDecodeCBORAttestation(aCborAttBuf) {
+  let attObj = CBOR.decode(aCborAttBuf);
+  console.log(":: Attestation CBOR Object ::");
   if (!("authData" in attObj && "fmt" in attObj && "attStmt" in attObj)) {
     throw "Invalid CBOR Attestation Object";
   }
@@ -168,23 +171,44 @@ function webAuthnDecodeAttestation(aAttestationBuf) {
     throw "Invalid CBOR Attestation Statement";
   }
 
-  let attData = {
-    rpIdHash: attObj.authData.slice(0, 32),
-    flags: attObj.authData.slice(32, 33),
-    counter: attObj.authData.slice(33, 37),
-    aaguid: attObj.authData.slice(37, 53),
-    credId: null
-  };
-  let credIdLen = (attObj.authData[53] << 8) + attObj.authData[54];
-  attData.credId = attObj.authData.slice(55, 55 + credIdLen);
+  return webAuthnDecodeAttestation(attObj.authData)
+  .then(function (aAttestationObj) {
+    aAttestationObj.attestationObject = attObj;
+    return Promise.resolve(aAttestationObj);
+  });
+}
 
-  console.log(":: CBOR Attestation Object Data ::");
-  console.log("RP ID Hash: " + hexEncode(attData.rpIdHash));
-  console.log("Counter: " + hexEncode(attData.counter) + " Flags: " + attData.flags);
+function webAuthnDecodeAttestation(aAuthData) {
+  let rpIdHash = aAuthData.slice(0, 32);
+  let flags = aAuthData.slice(32, 33);
+  let counter = aAuthData.slice(33, 37);
+
+  console.log(":: Attestation Object Data ::");
+  console.log("RP ID Hash: " + hexEncode(rpIdHash));
+  console.log("Counter: " + hexEncode(counter) + " Flags: " + flags);
+
+  if ((flags & flag_AT) == 0x00) {
+    // No Attestation Data, so we're done.
+    return Promise.resolve({
+      rpIdHash: rpIdHash,
+      flags: flags,
+      counter: counter,
+    });
+  }
+
+  if (aAuthData.length < 38) {
+    throw "Attestation Data flag was set, but not enough data passed in!";
+  }
+
+  let attData = {};
+  attData.aaguid = aAuthData.slice(37, 53);
+  attData.credIdLen = (aAuthData[53] << 8) + aAuthData[54];
+  attData.credId = aAuthData.slice(55, 55 + attData.credIdLen);
+
+  console.log(":: Attestation Data ::");
   console.log("AAGUID: " + hexEncode(attData.aaguid));
-  console.log("Credential ID (len="+credIdLen+"): " + hexEncode(attData.credId));
 
-  cborPubKey = attObj.authData.slice(55 + credIdLen);
+  cborPubKey = aAuthData.slice(55 + attData.credIdLen);
   var pubkeyObj = CBOR.decode(cborPubKey.buffer);
   if (!("alg" in pubkeyObj && "x" in pubkeyObj && "y" in pubkeyObj)) {
     throw "Invalid CBOR Public Key Object";
@@ -202,12 +226,14 @@ function webAuthnDecodeAttestation(aAttestationBuf) {
 
   return importPublicKey(pubKeyBytes)
   .then(function(aKeyHandle) {
-    return {
-      attestationObject: attObj,
+    return Promise.resolve({
+      rpIdHash: rpIdHash,
+      flags: flags,
+      counter: counter,
       attestationAuthData: attData,
       publicKeyBytes: pubKeyBytes,
       publicKeyHandle: aKeyHandle,
-    };
+    });
   });
 }
 
@@ -328,9 +354,10 @@ $(document).ready(function() {
       append("createOut", "Note: Raw response in console.\n");
       console.log("Credentials.Create response: ", aNewCredentialInfo);
 
-      return webAuthnDecodeAttestation(aNewCredentialInfo.response.attestationObject.buffer);
+      return webAuthnDecodeCBORAttestation(aNewCredentialInfo.response.attestationObject.buffer);
     })
     .then(function (aAttestation) {
+      testEqual("createOut", aAttestation.flags, (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
       testEqual("createOut", hexEncode(aAttestation.attestationAuthData.credId), hexEncode(state.createResponse.rawId), "Credential ID from CBOR and Raw ID match");
       state.keyHandle = state.createResponse.rawId;
       append("createOut", "Keypair Identifier: " + hexEncode(state.keyHandle) + "\n");
@@ -339,8 +366,8 @@ $(document).ready(function() {
       state.publicKey = aAttestation.publicKeyHandle;
 
       append("createOut", "\n:: CBOR Attestation Object Data ::\n");
-      append("createOut", "RP ID Hash: " + hexEncode(aAttestation.attestationAuthData.rpIdHash) + "\n");
-      append("createOut", "Counter: " + hexEncode(aAttestation.attestationAuthData.counter) + " Flags: " + aAttestation.attestationAuthData.flags + "\n");
+      append("createOut", "RP ID Hash: " + hexEncode(aAttestation.rpIdHash) + "\n");
+      append("createOut", "Counter: " + hexEncode(aAttestation.counter) + " Flags: " + aAttestation.flags + "\n");
       append("createOut", "AAGUID: " + hexEncode(aAttestation.attestationAuthData.aaguid) + "\n");
 
       /* Decode U2F Attestation Certificates */
@@ -470,38 +497,36 @@ $(document).ready(function() {
       } else {
         throw "Unknown spec version: Missing clientData.hashAlgorithm";
       }
+        return webAuthnDecodeAttestation(aAssertion.response.authenticatorData)
+      .then(function(decodedResult) {
+        if (!testEqual("getOut", decodedResult.flags, flag_TUP, "User presence must be the only flag set")) {
+          throw "Assertion's user presence byte not set correctly.";
+        }
 
-      if (!testEqual("getOut", aAssertion.response.signature[0], 0x01, "User Presence must be set")) {
-        throw "Assertion's user presence byte not set correctly.";
-      }
+        testEqual("getOut", decodedResult.counter.length, 4, "Counter must be 4 bytes");
 
-      let presenceAndCounter = aAssertion.response.signature.slice(0,5);
-      let signatureValue = aAssertion.response.signature.slice(5);
-      let rpIdHash = aAssertion.response.authenticatorData.slice(0,32);
+        // Assemble the signed data and verify the signature
+        appId = document.domain
+        if ($("#rpIdText").val()) {
+          appId = $("#rpIdText").val();
+        }
 
-      // Assemble the signed data and verify the signature
-      appId = document.domain
-      if ($("#rpIdText").val()) {
-        appId = $("#rpIdText").val();
-      }
-
-      return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON)
+        return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON, decodedResult);
+      })
       .then(function(aParams) {
-        console.log(clientData.origin, clientData);
-        console.log(aParams.appParam, rpIdHash, presenceAndCounter, aParams.challengeParam);
         append("getOut", "ClientData buffer: " + hexEncode(aAssertion.response.clientDataJSON) + "\n\n");
         append("getOut", "ClientDataHash: " + hexEncode(aParams.challengeParam) + "\n\n");
-        return assembleSignedData(aParams.appParam, presenceAndCounter, aParams.challengeParam);
+        return assembleSignedData(aParams.appParam, aParams.attestation.flags,
+                                  aParams.attestation.counter, aParams.challengeParam);
       })
       .then(function(aSignedData) {
         append("getOut", "Signed Data assembled: " + aSignedData + "\n");
-        console.log(state.publicKey, aSignedData, signatureValue);
-        return verifySignature(state.publicKey, aSignedData, signatureValue);
+        console.log(state.publicKey, aSignedData, aAssertion.response.signature);
+        return verifySignature(state.publicKey, aSignedData, aAssertion.response.signature);
       })
       .then(function(aSignatureValid) {
         test("getOut", aSignatureValid, "The token signature must be valid.");
       });
-
     }).catch(function (aErr) {
       gResults.fail();
       append("getOut", "Got error:\n");
