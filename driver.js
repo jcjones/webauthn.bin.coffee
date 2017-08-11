@@ -1,10 +1,41 @@
 var TIMEOUT = 2000; // ms
 
+class ResultTracker {
+  construct() {
+    this.reset()
+  }
+  reset() {
+    this.failCount = 0;
+    this.todoCount = 0;
+  }
+  fail() {
+    this.failCount += 1;
+  }
+  todo() {
+    this.todoCount += 1;
+  }
+  get failures() {
+    return this.failCount;
+  }
+  get todos() {
+    return this.todoCount;
+  }
+  passed() {
+    return this.failures == 0;
+  }
+  toString() {
+    return "Failures: " + this.failures + " TODOs: " + this.todos;
+  }
+}
+
+var gResults = new ResultTracker()
+
 function append(id, text) {
   $("#"+id).text($("#"+id).text() + text);
 }
 
 function test(id, test, text) {
+  if (!test) { gResults.fail(); }
   let message = (test)? "[PASS]" : "[FAIL]";
   message += " " + text + "\n";
   append(id, message);
@@ -17,9 +48,16 @@ function testEqual(id, val1, val2, msg) {
   return test(id, result, msg + ": " + val1 + cmp + val2);
 }
 
-function resultColor(id, success) {
-  if (success) { $("#"+id).removeClass("failure"); $("#"+id).addClass("success"); }
-  else         { $("#"+id).removeClass("success"); $("#"+id).addClass("failure"); }
+function resultColor(id) {
+  if (gResults.failures == 0) {
+    if (gResults.todos == 0) {
+      $("#"+id).removeClass("failure"); $("#"+id).removeClass("todo"); $("#"+id).addClass("success");
+    } else {
+      $("#"+id).removeClass("failure"); $("#"+id).removeClass("success"); $("#"+id).addClass("todo");
+    }
+  } else {
+    $("#"+id).removeClass("success"); $("#"+id).removeClass("todo"); $("#"+id).addClass("failure");
+  }
 }
 
 function hexEncode(buf) {
@@ -95,6 +133,11 @@ function assembleRegistrationSignedData(appParam, challengeParam, keyHandle, pub
 }
 
 function assemblePublicKeyBytesData(xCoord, yCoord) {
+  // Produce an uncompressed EC key point. These start with 0x04, and then
+  // two 32-byte numbers denoting X and Y.
+  if (xCoord.length != 32 || yCoord.length != 32) {
+    throw ("Coordinates must be 32 bytes long");
+  }
   let keyBytes = new Uint8Array(65);
   keyBytes[0] = 0x04;
   xCoord.map((x, i) => keyBytes[1 + i] = x);
@@ -113,6 +156,59 @@ var state = {
   // Parsed values
   publicKey: null,
   keyHandle: null,
+}
+
+function webAuthnDecodeAttestation(aAttestationBuf) {
+  let attObj = CBOR.decode(aAttestationBuf);
+  console.log("Attestation CBOR Object:", attObj);
+  if (!("authData" in attObj && "fmt" in attObj && "attStmt" in attObj)) {
+    throw "Invalid CBOR Attestation Object";
+  }
+  if (!("sig" in attObj.attStmt && "x5c" in attObj.attStmt)) {
+    throw "Invalid CBOR Attestation Statement";
+  }
+
+  let attData = {
+    rpIdHash: attObj.authData.slice(0, 32),
+    flags: attObj.authData.slice(32, 33),
+    counter: attObj.authData.slice(33, 37),
+    aaguid: attObj.authData.slice(37, 53),
+    credId: null
+  };
+  let credIdLen = (attObj.authData[53] << 8) + attObj.authData[54];
+  attData.credId = attObj.authData.slice(55, 55 + credIdLen);
+
+  console.log(":: CBOR Attestation Object Data ::");
+  console.log("RP ID Hash: " + hexEncode(attData.rpIdHash));
+  console.log("Counter: " + hexEncode(attData.counter) + " Flags: " + attData.flags);
+  console.log("AAGUID: " + hexEncode(attData.aaguid));
+  console.log("Credential ID (len="+credIdLen+"): " + hexEncode(attData.credId));
+
+  cborPubKey = attObj.authData.slice(55 + credIdLen);
+  var pubkeyObj = CBOR.decode(cborPubKey.buffer);
+  if (!("alg" in pubkeyObj && "x" in pubkeyObj && "y" in pubkeyObj)) {
+    throw "Invalid CBOR Public Key Object";
+  }
+  if (pubkeyObj.alg != "ES256") {
+    throw "Unexpected public key algorithm";
+  }
+
+  let pubKeyBytes = assemblePublicKeyBytesData(pubkeyObj.x, pubkeyObj.y);
+  console.log(":: CBOR Public Key Object Data ::");
+  console.log("Algorithm: " + pubkeyObj.alg);
+  console.log("X: " + pubkeyObj.x);
+  console.log("Y: " + pubkeyObj.y);
+  console.log("Uncompressed (hex): " + hexEncode(pubKeyBytes));
+
+  return importPublicKey(pubKeyBytes)
+  .then(function(aKeyHandle) {
+    return {
+      attestationObject: attObj,
+      attestationAuthData: attData,
+      publicKeyBytes: pubKeyBytes,
+      publicKeyHandle: aKeyHandle,
+    };
+  });
 }
 
 function importPublicKey(keyBytes) {
@@ -190,7 +286,8 @@ $(document).ready(function() {
   let success = true;
 
   $("#createButton").click(function() {
-    $("#createOut").text("");
+    $("#createOut").text("Contacting token... please perform your verification gesture (e.g., touch it, or plug it in)\n\n");
+    gResults.reset();
 
     let challengeBytes = new Uint8Array(16);
     window.crypto.getRandomValues(challengeBytes);
@@ -213,10 +310,6 @@ $(document).ready(function() {
       parameters: [
         {
           type: "public-key",
-          algorithm: "p-256", // Not actually in-spec, but TODO in Firefox
-        },
-        {
-          type: "public-key",
           algorithm: "ES256",
         }
       ],
@@ -235,51 +328,28 @@ $(document).ready(function() {
       append("createOut", "Note: Raw response in console.\n");
       console.log("Credentials.Create response: ", aNewCredentialInfo);
 
-      var attObj = CBOR.decode(aNewCredentialInfo.response.attestationObject.buffer);
-      console.log("Attestation CBOR Object:", attObj);
-      if (!("authData" in attObj && "fmt" in attObj && "attStmt" in attObj)) {
-        throw "Invalid CBOR Attestation Object";
-      }
-      if (!("sig" in attObj.attStmt && "x5c" in attObj.attStmt)) {
-        throw "Invalid CBOR Attestation Statement";
-      }
+      return webAuthnDecodeAttestation(aNewCredentialInfo.response.attestationObject.buffer);
+    })
+    .then(function (aAttestation) {
+      testEqual("createOut", hexEncode(aAttestation.attestationAuthData.credId), hexEncode(state.createResponse.rawId), "Credential ID from CBOR and Raw ID match");
+      state.keyHandle = state.createResponse.rawId;
+      append("createOut", "Keypair Identifier: " + hexEncode(state.keyHandle) + "\n");
+      append("createOut", "Public Key: " + hexEncode(aAttestation.publicKeyBytes) + "\n");
 
-      state.rpIdHash = attObj.authData.slice(0, 32);
-      state.flags = attObj.authData.slice(32, 33);
-      state.counter = attObj.authData.slice(33, 37);
-      state.attData = {}
-      state.attData.aaguid = attObj.authData.slice(37, 53);
-      state.attData.credIdLen = (attObj.authData[53] << 8) + attObj.authData[54];
-      state.attData.credId = attObj.authData.slice(55, 55 + state.attData.credIdLen);
+      state.publicKey = aAttestation.publicKeyHandle;
 
       append("createOut", "\n:: CBOR Attestation Object Data ::\n");
-      append("createOut", "RP ID Hash: " + hexEncode(state.rpIdHash) + "\n");
-      append("createOut", "Counter: " + hexEncode(state.counter) + "\n");
-      append("createOut", "AAGUID: " + hexEncode(state.attData.aaguid) + "\n");
-
-      cborPubKey = attObj.authData.slice(55 + state.attData.credIdLen);
-      var pubkeyObj = CBOR.decode(cborPubKey.buffer);
-      console.log("Public Key CBOR Object:", pubkeyObj);
-      if (!("alg" in pubkeyObj && "x" in pubkeyObj && "y" in pubkeyObj)) {
-        throw "Invalid CBOR Public Key Object";
-      }
-      if (!test("createOut", pubkeyObj.alg == "ES256", "Public Key is ES256, as requested")) {
-        throw "Unexpected public key algorithm";
-      }
-
-      state.publicKeyBytes = assemblePublicKeyBytesData(pubkeyObj.x, pubkeyObj.y);
-
-      testEqual("createOut", hexEncode(state.attData.credId), hexEncode(aNewCredentialInfo.rawId), "Credential ID from CBOR and Raw ID match");
-      state.keyHandle = aNewCredentialInfo.rawId;
-      append("createOut", "Key Handle: " + hexEncode(state.keyHandle) + "\n");
+      append("createOut", "RP ID Hash: " + hexEncode(aAttestation.attestationAuthData.rpIdHash) + "\n");
+      append("createOut", "Counter: " + hexEncode(aAttestation.attestationAuthData.counter) + " Flags: " + aAttestation.attestationAuthData.flags + "\n");
+      append("createOut", "AAGUID: " + hexEncode(aAttestation.attestationAuthData.aaguid) + "\n");
 
       /* Decode U2F Attestation Certificates */
       append("createOut", "\n:: Attestation Certificate Information ::\n");
-      if (attObj.attStmt.x5c.length != 1) {
+      if (aAttestation.attestationObject.attStmt.x5c.length != 1) {
         throw "Can't yet handle cert chains != 1 cert long";
       }
 
-      state.attestationCertDER = attObj.attStmt.x5c[0];
+      state.attestationCertDER = aAttestation.attestationObject.attStmt.x5c[0];
       append("createOut", "DER-encoded Certificate: " + hexEncode(state.attestationCertDER) + "\n");
 
       let certAsn1 = org.pkijs.fromBER(repairArray(state.attestationCertDER).buffer);
@@ -293,7 +363,7 @@ $(document).ready(function() {
       append("createOut", "Issuer: " + state.attestationCert.issuer.types_and_values[0].value.value_block.value + "\n");
       append("createOut", "Validity (in millis): " + (state.attestationCert.notAfter.value - state.attestationCert.notBefore.value + "\n"));
 
-      state.attestationSig = attObj.attStmt.sig;
+      state.attestationSig = aAttestation.attestationObject.attStmt.sig;
       let sigAsn1 = org.pkijs.fromBER(repairArray(state.attestationSig).buffer);
       if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature parsed")) {
         throw "Attestation Signature failed to validate";
@@ -307,54 +377,54 @@ $(document).ready(function() {
 
       /* Decode Client Data */
       append("createOut", "\n:: Client Data Information ::\n");
-      let clientData = JSON.parse(buffer2string(aNewCredentialInfo.response.clientDataJSON));
+      let clientData = JSON.parse(buffer2string(state.createResponse.response.clientDataJSON));
       append("createOut", "Client Data object, in full:\n");
       append("createOut", JSON.stringify(clientData, null, 2) + "\n\n");
 
       testEqual("createOut", b64enc(challengeBytes), clientData.challenge, "Challenge matches");
-      testEqual("createOut", window.location.origin, clientData.origin, "ClientData origin matches this origin");
+      if(clientData.origin != window.location.origin) {
+        // TODO: Remove this check - Spec changed
+        append("createOut", "NOTE: Using WD-05 clientData.origin definition, not WD-06\n");
+        let rpId = createRequest.rp.id || document.domain;
+        testEqual("createOut", rpId, clientData.origin, "ClientData.origin matches the RP ID (WD-05)");
+        gResults.todo();
+      } else {
+        testEqual("createOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      }
       if (clientData.hashAlg) {
         // TODO: Remove this check - Spec changed
         testEqual("createOut", "S256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
         append("createOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
+        gResults.todo();
       } else if (clientData.hashAlgorithm) {
         testEqual("createOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
       } else {
         throw "Unknown spec version: Missing clientData.hashAlgorithm";
       }
-
-      /* Import the public key */
-      importPublicKey(state.publicKeyBytes)
-      .then(function(aKey) {
-        state.publicKey = aKey;
-        append("createOut", "\n:: Public Key Import ::\n");
-        success = test("createOut", true, "Imported public key successfully");
-        resultColor("createOut", success);
-      })
-      .catch(function(aErr) {
-        console.log("Credentials.Create: Error importing key ", aErr);
-        throw "Error Importing Key: " + err;
-      });
-
-    }).catch(function (aErr) {
-      resultColor("createOut", false);
-      append("createOut", "Got error:\n");
-      append("createOut", aErr.toString() + "\n\n");
-      return;
     }).then(function (){
       append("createOut", "\n\nRaw request:\n");
       append("createOut", JSON.stringify(createRequest, null, 2) + "\n\n");
+    }).catch(function (aErr) {
+      gResults.fail();
+      append("createOut", "Got error:\n");
+      append("createOut", aErr.toString() + "\n\n");
+    }).then(function (){
+      resultColor("createOut");
+      append("createOut", gResults.toString());
     });
   });
 
   $("#getButton").click(function() {
     $("#getOut").text("");
+    gResults.reset();
 
     if (!state.createResponse) {
-      resultColor("getOut", false);
+      gResults.fail();
       append("getOut", "Need to make a credential first:\n");
       return;
     }
+
+    $("#getOut").text("Contacting token... please perform your verification gesture (e.g., touch it, or plug it in)\n\n");
 
     let newCredential = {
       type: "public-key",
@@ -382,7 +452,15 @@ $(document).ready(function() {
 
       let clientData = JSON.parse(buffer2string(aAssertion.response.clientDataJSON));
       testEqual("getOut", clientData.challenge, b64enc(challengeBytes), "Challenge is identical");
-      testEqual("getOut", clientData.origin, window.location.origin, "Client Data origin matches current origin");
+      if(clientData.origin != window.location.origin) {
+        // TODO: Remove this check - Spec changed
+        append("getOut", "NOTE: Using WD-05 clientData.origin definition, not WD-06\n");
+        let rpId = publicKeyCredentialRequestOptions.rpId || document.domain;
+        testEqual("getOut", rpId, clientData.origin, "ClientData.origin matches the RP ID (WD-05)");
+        gResults.todo();
+      } else {
+        testEqual("getOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      }
       if (clientData.hashAlg) {
         // TODO: Remove this check - Spec changed
         testEqual("getOut", "S256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
@@ -422,16 +500,19 @@ $(document).ready(function() {
       })
       .then(function(aSignatureValid) {
         test("getOut", aSignatureValid, "The token signature must be valid.");
-        resultColor("getOut", aSignatureValid);
       });
 
     }).catch(function (aErr) {
-      resultColor("getOut", false);
+      gResults.fail();
       append("getOut", "Got error:\n");
       append("getOut", aErr.toString() + "\n\n");
     }).then(function (){
       append("getOut", "\n\nRaw request:\n");
       append("getOut", JSON.stringify(publicKeyCredentialRequestOptions, null, 2) + "\n\n");
+    }).then(function (){
+      resultColor("getOut");
+      append("getOut", gResults.toString());
     });
+
   });
 });
