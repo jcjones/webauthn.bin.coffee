@@ -396,6 +396,8 @@ $(document).ready(function() {
         throw "Attestation Signature failed to validate";
       }
 
+      testEqual("createOut", sigAsn1.result.block_length, repairArray(state.attestationSig).buffer.byteLength, "Signature buffer has no unnecessary bytes.");
+
       append("createOut", "Attestation Signature (by the key in the cert, over the new credential):\n");
       let R = new Uint8Array(sigAsn1.result.value_block.value[0].value_block.value_hex);
       let S = new Uint8Array(sigAsn1.result.value_block.value[1].value_block.value_hex);
@@ -420,7 +422,7 @@ $(document).ready(function() {
       }
       if (clientData.hashAlg) {
         // TODO: Remove this check - Spec changed
-        testEqual("createOut", "S256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
+        testEqual("createOut", "SHA-256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
         append("createOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
         gResults.todo();
       } else if (clientData.hashAlgorithm) {
@@ -490,7 +492,7 @@ $(document).ready(function() {
       }
       if (clientData.hashAlg) {
         // TODO: Remove this check - Spec changed
-        testEqual("getOut", "S256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
+        testEqual("getOut", "SHA-256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
         append("getOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
       } else if (clientData.hashAlgorithm) {
         testEqual("getOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
