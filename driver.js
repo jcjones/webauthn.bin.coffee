@@ -535,6 +535,11 @@ $(document).ready(function() {
 
         testEqual("getOut", aAttestation.counter.length, 4, "Counter must be 4 bytes");
 
+        append("getOut", "\n:: CBOR Attestation Object Data ::\n");
+        append("getOut", "RP ID Hash: " + hexEncode(aAttestation.rpIdHash) + "\n");
+        append("getOut", "Counter: " + hexEncode(aAttestation.counter) + " Flags: " + aAttestation.flags + "\n");
+        append("getOut", "\n");
+
         // Assemble the signed data and verify the signature
         appId = document.domain
         if ($("#rpIdText").val()) {
