@@ -347,8 +347,10 @@ $(document).ready(function() {
       timeout: 60000,  // 1 minute
       excludeList: [] // No excludeList
     };
+    let rpid = document.domain;
     if ($("#rpIdText").val()) {
-      createRequest.rp.id = $("#rpIdText").val();
+      rpid = $("#rpIdText").val();
+      createRequest.rp.id = rpid;
     }
     state.createRequest = createRequest;
 
@@ -359,6 +361,15 @@ $(document).ready(function() {
       console.log("Credentials.Create response: ", aNewCredentialInfo);
 
       return webAuthnDecodeCBORAttestation(aNewCredentialInfo.response.attestationObject.buffer);
+    })
+    .then(function (aAttestation) {
+      // Make sure the RP ID hash matches what we calculate.
+      return crypto.subtle.digest("SHA-256", string2buffer(rpid))
+      .then(function(calculatedHash) {
+        testEqual("createOut", b64enc(new Uint8Array(calculatedHash)), b64enc(aAttestation.rpIdHash),
+           "Calculated RP ID hash must match what the browser derived.");
+        return Promise.resolve(aAttestation);
+      });
     })
     .then(function (aAttestation) {
       testEqual("createOut", aAttestation.flags, (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
@@ -474,8 +485,11 @@ $(document).ready(function() {
       allowList: [newCredential]
     };
 
+
+    let rpid = document.domain;
     if ($("#rpIdText").val()) {
-      publicKeyCredentialRequestOptions.rpId = $("#rpIdText").val();
+      rpid = $("#rpIdText").val();
+      publicKeyCredentialRequestOptions.rpId = rpid;
     }
 
     navigator.credentials.get({publicKey: publicKeyCredentialRequestOptions})
@@ -503,13 +517,23 @@ $(document).ready(function() {
       } else {
         throw "Unknown spec version: Missing clientData.hashAlgorithm";
       }
-        return webAuthnDecodeAttestation(aAssertion.response.authenticatorData)
-      .then(function(decodedResult) {
-        if (!testEqual("getOut", decodedResult.flags, flag_TUP, "User presence must be the only flag set")) {
+
+      return webAuthnDecodeAttestation(aAssertion.response.authenticatorData)
+      .then(function (aAttestation) {
+        // Make sure the RP ID hash matches what we calculate.
+        return crypto.subtle.digest("SHA-256", string2buffer(rpid))
+        .then(function(calculatedHash) {
+          testEqual("getOut", b64enc(new Uint8Array(calculatedHash)), b64enc(aAttestation.rpIdHash),
+             "Calculated RP ID hash must match what the browser derived.");
+          return Promise.resolve(aAttestation);
+        });
+      })
+      .then(function(aAttestation) {
+        if (!testEqual("getOut", aAttestation.flags, flag_TUP, "User presence must be the only flag set")) {
           throw "Assertion's user presence byte not set correctly.";
         }
 
-        testEqual("getOut", decodedResult.counter.length, 4, "Counter must be 4 bytes");
+        testEqual("getOut", aAttestation.counter.length, 4, "Counter must be 4 bytes");
 
         // Assemble the signed data and verify the signature
         appId = document.domain
@@ -517,7 +541,7 @@ $(document).ready(function() {
           appId = $("#rpIdText").val();
         }
 
-        return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON, decodedResult);
+        return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON, aAttestation);
       })
       .then(function(aParams) {
         append("getOut", "ClientData buffer: " + hexEncode(aAssertion.response.clientDataJSON) + "\n\n");
