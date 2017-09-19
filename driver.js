@@ -341,6 +341,10 @@ $(document).ready(function() {
         {
           type: "public-key",
           algorithm: "ES256",
+        },
+        {
+          type: "public-key",
+          algorithm: -7,
         }
       ],
 
