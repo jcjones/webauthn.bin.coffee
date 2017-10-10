@@ -54,6 +54,13 @@ function testEqual(id, val1, val2, msg) {
   return test(id, result, msg + ": " + val1 + cmp + val2);
 }
 
+function getArrayBuffer(id, buf) {
+  if (buf.constructor === Uint8Array) {
+    return repairArray(buf).buffer;
+  }
+  return buf;
+}
+
 function resultColor(id) {
   if (gResults.failures == 0) {
     if (gResults.todos == 0) {
@@ -67,6 +74,9 @@ function resultColor(id) {
 }
 
 function hexEncode(buf) {
+  if (!(buf.constructor === Uint8Array)) {
+    buf = new Uint8Array(buf);
+  }
   return Array.from(buf)
               .map(function(x){ return ("0"+x.toString(16)).substr(-2) })
               .join("");
@@ -89,6 +99,9 @@ function string2buffer(str) {
 
 function buffer2string(buf) {
   let str = "";
+  if (!(buf.constructor === Uint8Array)) {
+    buf = new Uint8Array(buf);
+  }
   buf.map(function(x){ return str += String.fromCharCode(x) });
   return str;
 }
@@ -122,20 +135,20 @@ function deriveAppAndChallengeParam(appId, clientData, attestation) {
 
 function assembleSignedData(appParam, flags, counter, challengeParam) {
   let signedData = new Uint8Array(32 + 1 + 4 + 32);
-  appParam.map((x, i) => signedData[0 + i] = x);
-  signedData[32] = flags;
-  counter.map((x, i) => signedData[33 + i] = x);
-  challengeParam.map((x, i) => signedData[37 + i] = x);
+  new Uint8Array(appParam).map((x, i) => signedData[0 + i] = x);
+  signedData[32] = new Uint8Array(flags)[0];
+  new Uint8Array(counter).map((x, i) => signedData[33 + i] = x);
+  new Uint8Array(challengeParam).map((x, i) => signedData[37 + i] = x);
   return signedData;
 }
 
 function assembleRegistrationSignedData(appParam, challengeParam, keyHandle, pubKey) {
   let signedData = new Uint8Array(1 + 32 + 32 + keyHandle.length + 65);
   signedData[0] = 0x00;
-  appParam.map((x, i) => signedData[1 + i] = x);
-  challengeParam.map((x, i) => signedData[33 + i] = x);
-  keyHandle.map((x, i) => signedData[65 + i] = x);
-  pubKey.map((x, i) => signedData[65 + keyHandle.length + i] = x);
+  new Uint8Array(appParam).map((x, i) => signedData[1 + i] = x);
+  new Uint8Array(challengeParam).map((x, i) => signedData[33 + i] = x);
+  new Uint8Array(keyHandle).map((x, i) => signedData[65 + i] = x);
+  new Uint8Array(pubKey).map((x, i) => signedData[65 + keyHandle.length + i] = x);
   return signedData;
 }
 
@@ -175,14 +188,14 @@ function webAuthnDecodeCBORAttestation(aCborAttBuf) {
     throw "Invalid CBOR Attestation Statement";
   }
 
-  return webAuthnDecodeAttestation(attObj.authData)
+  return webAuthnDecodeAuthDataArray(new Uint8Array(attObj.authData))
   .then(function (aAttestationObj) {
     aAttestationObj.attestationObject = attObj;
     return Promise.resolve(aAttestationObj);
   });
 }
 
-function webAuthnDecodeAttestation(aAuthData) {
+function webAuthnDecodeAuthDataArray(aAuthData) {
   let rpIdHash = aAuthData.slice(0, 32);
   let flags = aAuthData.slice(32, 33);
   let counter = aAuthData.slice(33, 37);
@@ -213,7 +226,7 @@ function webAuthnDecodeAttestation(aAuthData) {
   console.log("AAGUID: " + hexEncode(attData.aaguid));
 
   cborPubKey = aAuthData.slice(55 + attData.credIdLen);
-  var pubkeyObj = CBOR.decode(cborPubKey.buffer);
+  var pubkeyObj = CBOR.decode(getArrayBuffer("", cborPubKey));
   if (!("alg" in pubkeyObj && "x" in pubkeyObj && "y" in pubkeyObj)) {
     throw "Invalid CBOR Public Key Object";
   }
@@ -255,28 +268,28 @@ function importPublicKey(keyBytes) {
 }
 
 function verifySignature(key, data, derSig) {
+  let derSigArray = new Uint8Array(derSig);
   if (derSig.byteLength < 70) {
-    console.log("bad sig: " + hexEncode(derSig))
+    console.log("bad sig: " + hexEncode(derSigArray))
     throw "Invalid signature length: " + derSig.byteLength;
   }
 
   // Poor man's ASN.1 decode
   // R and S are always 32 bytes.  If ether has a DER
   // length > 32, it's just zeros we can chop off.
-  var lenR = derSig[3];
-  var lenS = derSig[3 + lenR + 2];
-  var padR = lenR - 32;
-  var padS = lenS - 32;
-  var sig = new Uint8Array(64);
-  derSig.subarray(4+padR,4+lenR).map(function(x,i) { return sig[i] = x });
-  derSig.subarray(4+lenR+2+padS,4+lenR+2+lenS).map(function(x,i) { return sig[32+i] = x });
+  let lenR = derSigArray[3];
+  let lenS = derSigArray[3 + lenR + 2];
+  let padR = lenR - 32;
+  let padS = lenS - 32;
+  let sig = new Uint8Array(64);
+  derSigArray.subarray(4+padR,4+lenR).map(function(x,i) { return sig[i] = x });
+  derSigArray.subarray(4+lenR+2+padS,4+lenR+2+lenS).map(function(x,i) { return sig[32+i] = x });
 
-  console.log("data: " + hexEncode(data));
-  console.log("der:  " + hexEncode(derSig));
-  console.log("raw:  " + hexEncode(sig));
-
-  let asn1 = org.pkijs.fromBER(derSig);
-
+  console.log("lenR:   ", lenR, " lenS: ", lenS);
+  console.log("key:    ", key, hexEncode(key));
+  console.log("data:   ", data, hexEncode(data));
+  console.log("derSig: ", derSigArray, hexEncode(derSigArray));
+  console.log("sig:    ", sig, hexEncode(sig));
 
   let alg = {name: "ECDSA", hash: "SHA-256"};
   return crypto.subtle.verify(alg, key, sig, data);
@@ -339,16 +352,24 @@ $(document).ready(function() {
 
       parameters: [
         {
+          alg: "ES256",
           type: "public-key",
           algorithm: "ES256",
+        },
+        {
+          alg: -7,
+          type: "public-key",
+          algorithm: -7,
         }
       ],
 
       timeout: 60000,  // 1 minute
       excludeList: [] // No excludeList
     };
+    let rpid = document.domain;
     if ($("#rpIdText").val()) {
-      createRequest.rp.id = $("#rpIdText").val();
+      rpid = $("#rpIdText").val();
+      createRequest.rp.id = rpid;
     }
     state.createRequest = createRequest;
 
@@ -358,10 +379,21 @@ $(document).ready(function() {
       append("createOut", "Note: Raw response in console.\n");
       console.log("Credentials.Create response: ", aNewCredentialInfo);
 
-      return webAuthnDecodeCBORAttestation(aNewCredentialInfo.response.attestationObject.buffer);
+      let buffer = getArrayBuffer("createOut", aNewCredentialInfo.response.attestationObject);
+      return webAuthnDecodeCBORAttestation(buffer);
     })
     .then(function (aAttestation) {
-      testEqual("createOut", aAttestation.flags, (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
+      // Make sure the RP ID hash matches what we calculate.
+      return crypto.subtle.digest("SHA-256", string2buffer(rpid))
+      .then(function(calculatedHash) {
+        testEqual("createOut", b64enc(new Uint8Array(calculatedHash)), b64enc(aAttestation.rpIdHash),
+           "Calculated RP ID hash must match what the browser derived.");
+        return Promise.resolve(aAttestation);
+      });
+    })
+    .then(function (aAttestation) {
+      let flags = new Uint8Array(aAttestation.flags);
+      testEqual("createOut", flags, (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
       testEqual("createOut", hexEncode(aAttestation.attestationAuthData.credId), hexEncode(state.createResponse.rawId), "Credential ID from CBOR and Raw ID match");
       state.keyHandle = state.createResponse.rawId;
       append("createOut", "Keypair Identifier: " + hexEncode(state.keyHandle) + "\n");
@@ -371,7 +403,7 @@ $(document).ready(function() {
 
       append("createOut", "\n:: CBOR Attestation Object Data ::\n");
       append("createOut", "RP ID Hash: " + hexEncode(aAttestation.rpIdHash) + "\n");
-      append("createOut", "Counter: " + hexEncode(aAttestation.counter) + " Flags: " + aAttestation.flags + "\n");
+      append("createOut", "Counter: " + hexEncode(aAttestation.counter) + " Flags: " + flags + "\n");
       append("createOut", "AAGUID: " + hexEncode(aAttestation.attestationAuthData.aaguid) + "\n");
 
       /* Decode U2F Attestation Certificates */
@@ -383,7 +415,7 @@ $(document).ready(function() {
       state.attestationCertDER = aAttestation.attestationObject.attStmt.x5c[0];
       append("createOut", "DER-encoded Certificate: " + hexEncode(state.attestationCertDER) + "\n");
 
-      let certAsn1 = org.pkijs.fromBER(repairArray(state.attestationCertDER).buffer);
+      let certAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationCertDER));
       if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate parsed")) {
         throw "Attestation Certificate didn't parse correctly.";
       }
@@ -395,12 +427,12 @@ $(document).ready(function() {
       append("createOut", "Validity (in millis): " + (state.attestationCert.notAfter.value - state.attestationCert.notBefore.value + "\n"));
 
       state.attestationSig = aAttestation.attestationObject.attStmt.sig;
-      let sigAsn1 = org.pkijs.fromBER(repairArray(state.attestationSig).buffer);
+      let sigAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationSig));
       if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature parsed")) {
         throw "Attestation Signature failed to validate";
       }
 
-      testEqual("createOut", sigAsn1.result.block_length, repairArray(state.attestationSig).buffer.byteLength, "Signature buffer has no unnecessary bytes.");
+      testEqual("createOut", sigAsn1.result.block_length, getArrayBuffer("createOut", state.attestationSig).byteLength, "Signature buffer has no unnecessary bytes.");
 
       append("createOut", "Attestation Signature (by the key in the cert, over the new credential):\n");
       let R = new Uint8Array(sigAsn1.result.value_block.value[0].value_block.value_hex);
@@ -461,9 +493,10 @@ $(document).ready(function() {
 
     let newCredential = {
       type: "public-key",
-      id: Uint8Array.from(state.createResponse.rawId),
+      id: new Uint8Array(state.createResponse.rawId),
       transports: ["usb", "nfc", "ble"],
     }
+    console.log("New Credential: ", newCredential);
 
     let challengeBytes = new Uint8Array(16);
     window.crypto.getRandomValues(challengeBytes);
@@ -474,8 +507,11 @@ $(document).ready(function() {
       allowList: [newCredential]
     };
 
+
+    let rpid = document.domain;
     if ($("#rpIdText").val()) {
-      publicKeyCredentialRequestOptions.rpId = $("#rpIdText").val();
+      rpid = $("#rpIdText").val();
+      publicKeyCredentialRequestOptions.rpId = rpid;
     }
 
     navigator.credentials.get({publicKey: publicKeyCredentialRequestOptions})
@@ -503,13 +539,30 @@ $(document).ready(function() {
       } else {
         throw "Unknown spec version: Missing clientData.hashAlgorithm";
       }
-        return webAuthnDecodeAttestation(aAssertion.response.authenticatorData)
-      .then(function(decodedResult) {
-        if (!testEqual("getOut", decodedResult.flags, flag_TUP, "User presence must be the only flag set")) {
+
+      return webAuthnDecodeAuthDataArray(aAssertion.response.authenticatorData)
+      .then(function (aAttestation) {
+        // Make sure the RP ID hash matches what we calculate.
+        return crypto.subtle.digest("SHA-256", string2buffer(rpid))
+        .then(function(calculatedHash) {
+          testEqual("getOut", b64enc(new Uint8Array(calculatedHash)), b64enc(new Uint8Array(aAttestation.rpIdHash)),
+             "Calculated RP ID hash must match what the browser derived.");
+          return Promise.resolve(aAttestation);
+        });
+      })
+      .then(function(aAttestation) {
+        if (!testEqual("getOut", new Uint8Array(aAttestation.flags), flag_TUP, "User presence must be the only flag set")) {
           throw "Assertion's user presence byte not set correctly.";
         }
 
-        testEqual("getOut", decodedResult.counter.length, 4, "Counter must be 4 bytes");
+        testEqual("getOut", aAttestation.counter.byteLength, 4, "Counter must be 4 bytes");
+
+        let flags = new Uint8Array(aAttestation.flags);
+
+        append("getOut", "\n:: CBOR Attestation Object Data ::\n");
+        append("getOut", "RP ID Hash: " + hexEncode(aAttestation.rpIdHash) + "\n");
+        append("getOut", "Counter: " + hexEncode(aAttestation.counter) + " Flags: " + flags + "\n");
+        append("getOut", "\n");
 
         // Assemble the signed data and verify the signature
         appId = document.domain
@@ -517,7 +570,7 @@ $(document).ready(function() {
           appId = $("#rpIdText").val();
         }
 
-        return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON, decodedResult);
+        return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON, aAttestation);
       })
       .then(function(aParams) {
         append("getOut", "ClientData buffer: " + hexEncode(aAssertion.response.clientDataJSON) + "\n\n");
@@ -528,7 +581,7 @@ $(document).ready(function() {
       .then(function(aSignedData) {
         append("getOut", "Signed Data assembled: " + aSignedData + "\n");
         console.log(state.publicKey, aSignedData, aAssertion.response.signature);
-        return verifySignature(state.publicKey, aSignedData, aAssertion.response.signature);
+        return verifySignature(state.publicKey, aSignedData, getArrayBuffer("getOut", aAssertion.response.signature));
       })
       .then(function(aSignatureValid) {
         test("getOut", aSignatureValid, "The token signature must be valid.");
