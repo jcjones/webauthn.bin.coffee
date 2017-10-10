@@ -188,14 +188,14 @@ function webAuthnDecodeCBORAttestation(aCborAttBuf) {
     throw "Invalid CBOR Attestation Statement";
   }
 
-  return webAuthnDecodeAttestation(attObj.authData)
+  return webAuthnDecodeAuthDataArray(new Uint8Array(attObj.authData))
   .then(function (aAttestationObj) {
     aAttestationObj.attestationObject = attObj;
     return Promise.resolve(aAttestationObj);
   });
 }
 
-function webAuthnDecodeAttestation(aAuthData) {
+function webAuthnDecodeAuthDataArray(aAuthData) {
   let rpIdHash = aAuthData.slice(0, 32);
   let flags = aAuthData.slice(32, 33);
   let counter = aAuthData.slice(33, 37);
@@ -540,7 +540,7 @@ $(document).ready(function() {
         throw "Unknown spec version: Missing clientData.hashAlgorithm";
       }
 
-      return webAuthnDecodeAttestation(aAssertion.response.authenticatorData)
+      return webAuthnDecodeAuthDataArray(aAssertion.response.authenticatorData)
       .then(function (aAttestation) {
         // Make sure the RP ID hash matches what we calculate.
         return crypto.subtle.digest("SHA-256", string2buffer(rpid))
