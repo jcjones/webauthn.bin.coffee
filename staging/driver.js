@@ -344,27 +344,25 @@ $(document).ready(function() {
 
       // User:
       user: {
-        id: "1098237235409872",
+        id: string2buffer("1098237235409872"),
         name: "john.p.smith@example.com",
         displayName: "John P. Smith",
         icon: "https://pics.acme.com/00/p/aBjjjpqPb.png"
       },
 
-      parameters: [
+      pubKeyCredParams: [
         {
           alg: "ES256",
           type: "public-key",
-          algorithm: "ES256",
         },
         {
           alg: -7,
           type: "public-key",
-          algorithm: -7,
         }
       ],
 
       timeout: 60000,  // 1 minute
-      excludeList: [] // No excludeList
+      excludeCredentials: [] // No excludeList
     };
     let rpid = document.domain;
     if ($("#rpIdText").val()) {
@@ -447,25 +445,9 @@ $(document).ready(function() {
       append("createOut", JSON.stringify(clientData, null, 2) + "\n\n");
 
       testEqual("createOut", b64enc(challengeBytes), clientData.challenge, "Challenge matches");
-      if(clientData.origin != window.location.origin) {
-        // TODO: Remove this check - Spec changed
-        append("createOut", "NOTE: Using WD-05 clientData.origin definition, not WD-06\n");
-        let rpId = createRequest.rp.id || document.domain;
-        testEqual("createOut", rpId, clientData.origin, "ClientData.origin matches the RP ID (WD-05)");
-        gResults.todo();
-      } else {
-        testEqual("createOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
-      }
-      if (clientData.hashAlg) {
-        // TODO: Remove this check - Spec changed
-        testEqual("createOut", "SHA-256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
-        append("createOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
-        gResults.todo();
-      } else if (clientData.hashAlgorithm) {
-        testEqual("createOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
-      } else {
-        throw "Unknown spec version: Missing clientData.hashAlgorithm";
-      }
+      testEqual("createOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      testEqual("createOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
+
     }).then(function (){
       append("createOut", "\n\nRaw request:\n");
       append("createOut", JSON.stringify(createRequest, null, 2) + "\n\n");
@@ -504,9 +486,8 @@ $(document).ready(function() {
     let publicKeyCredentialRequestOptions = {
       challenge: challengeBytes,
       timeout: 60000,
-      allowList: [newCredential]
+      allowCredentials: [newCredential]
     };
-
 
     let rpid = document.domain;
     if ($("#rpIdText").val()) {
@@ -521,24 +502,8 @@ $(document).ready(function() {
 
       let clientData = JSON.parse(buffer2string(aAssertion.response.clientDataJSON));
       testEqual("getOut", clientData.challenge, b64enc(challengeBytes), "Challenge is identical");
-      if(clientData.origin != window.location.origin) {
-        // TODO: Remove this check - Spec changed
-        append("getOut", "NOTE: Using WD-05 clientData.origin definition, not WD-06\n");
-        let rpId = publicKeyCredentialRequestOptions.rpId || document.domain;
-        testEqual("getOut", rpId, clientData.origin, "ClientData.origin matches the RP ID (WD-05)");
-        gResults.todo();
-      } else {
-        testEqual("getOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
-      }
-      if (clientData.hashAlg) {
-        // TODO: Remove this check - Spec changed
-        testEqual("getOut", "SHA-256", clientData.hashAlg, "Hash Algorithm is valid (WD-05)");
-        append("getOut", "NOTE: Using WD-05 hashAlg name, not WD-06 hashAlgorithm\n");
-      } else if (clientData.hashAlgorithm) {
-        testEqual("getOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
-      } else {
-        throw "Unknown spec version: Missing clientData.hashAlgorithm";
-      }
+      testEqual("getOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      testEqual("getOut", "SHA-256", clientData.hashAlgorithm, "Hash Algorithm is valid (WD-06)");
 
       return webAuthnDecodeAuthDataArray(aAssertion.response.authenticatorData)
       .then(function (aAttestation) {
