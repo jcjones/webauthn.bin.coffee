@@ -6,6 +6,15 @@ var TIMEOUT = 2000; // ms
 const flag_TUP = 0x01;
 const flag_AT = 0x40;
 
+const CBOR_kty = 1;
+const CBOR_kty_ec2 = 2;
+const CBOR_alg = 3;
+const CBOR_alg_ES256 = -7;
+const CBOR_crv = -1;
+const CBOR_crv_P256 = 1;
+const CBOR_crv_x = -2;
+const CBOR_crv_y = -3;
+
 class ResultTracker {
   construct() {
     this.reset()
@@ -227,18 +236,27 @@ function webAuthnDecodeAuthDataArray(aAuthData) {
 
   cborPubKey = aAuthData.slice(55 + attData.credIdLen);
   var pubkeyObj = CBOR.decode(getArrayBuffer("", cborPubKey));
-  if (!("alg" in pubkeyObj && "x" in pubkeyObj && "y" in pubkeyObj)) {
+  if (!(CBOR_kty in pubkeyObj && CBOR_alg in pubkeyObj && CBOR_crv in pubkeyObj
+        && CBOR_crv_x in pubkeyObj && CBOR_crv_y in pubkeyObj)) {
     throw "Invalid CBOR Public Key Object";
   }
-  if (pubkeyObj.alg != "ES256") {
+  if (pubkeyObj[CBOR_kty] != CBOR_kty_ec2) {
+    throw "Unexpected key type";
+  }
+  if (pubkeyObj[CBOR_alg] != CBOR_alg_ES256) {
     throw "Unexpected public key algorithm";
   }
+  if (pubkeyObj[CBOR_crv] != CBOR_crv_P256) {
+    throw "Unexpected curve";
+  }
 
-  let pubKeyBytes = assemblePublicKeyBytesData(pubkeyObj.x, pubkeyObj.y);
+  let pubKeyBytes = assemblePublicKeyBytesData(pubkeyObj[CBOR_crv_x], pubkeyObj[CBOR_crv_y]);
   console.log(":: CBOR Public Key Object Data ::");
-  console.log("Algorithm: " + pubkeyObj.alg);
-  console.log("X: " + pubkeyObj.x);
-  console.log("Y: " + pubkeyObj.y);
+  console.log("kty: " + pubkeyObj[CBOR_kty] + " (EC2)");
+  console.log("alg: " + pubkeyObj[CBOR_alg] + " (ES256)");
+  console.log("crv: " + pubkeyObj[CBOR_crv] + " (P256)");
+  console.log("X: " + pubkeyObj[CBOR_crv_x]);
+  console.log("Y: " + pubkeyObj[CBOR_crv_y]);
   console.log("Uncompressed (hex): " + hexEncode(pubKeyBytes));
 
   return importPublicKey(pubKeyBytes)
