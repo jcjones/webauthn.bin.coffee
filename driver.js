@@ -370,10 +370,6 @@ $(document).ready(function() {
 
       pubKeyCredParams: [
         {
-          alg: "ES256",
-          type: "public-key",
-        },
-        {
           alg: -7,
           type: "public-key",
         }
