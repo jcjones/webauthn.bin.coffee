@@ -375,8 +375,16 @@ $(document).ready(function() {
         }
       ],
 
+      authenticatorSelection: {
+        authenticatorAttachment: "cross-platform",
+        requireResidentKey: false,
+        userVerification: "preferred"
+      },
+
+      attestation: "direct",
       timeout: 60000,  // 1 minute
-      excludeCredentials: [] // No excludeList
+      excludeCredentials: [], // No excludeList
+      extensions: { "exts": true }
     };
     let rpid = document.domain;
     if ($("#rpIdText").val()) {
@@ -500,7 +508,9 @@ $(document).ready(function() {
     let publicKeyCredentialRequestOptions = {
       challenge: challengeBytes,
       timeout: 60000,
-      allowCredentials: [newCredential]
+      allowCredentials: [newCredential],
+      userVerification: "preferred",
+      extensions: { "txAuthSimple": "Execute order 66." }
     };
 
     let rpid = document.domain;
