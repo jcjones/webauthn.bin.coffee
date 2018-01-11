@@ -65,7 +65,9 @@ function testEqual(id, val1, val2, msg) {
 
 function getArrayBuffer(id, buf) {
   if (buf.constructor === Uint8Array) {
-    return repairArray(buf).buffer;
+    // buf is a shared array, and we want to make copies of particular parts
+    // for our ArrayBuffer views.
+    return buf.slice(0, buf.byteLength).buffer;
   }
   return buf;
 }
@@ -327,22 +329,17 @@ function asn1Okay(asn1) {
   return true;
 }
 
-// OMG why are we encoding/decoding to get the right type?
-// hexDecode(hexEncode(state.attestationCertDER)) === Uint8Array
-// state.attestationCertDER === Uint8Array
-// but unless we encode/decode, it's ~168 bytes after parsing, whereas it
-// should be ~309 bytes.
-function repairArray(a) {
-  return hexDecode(hexEncode(a))
-}
-
 $(document).ready(function() {
-  if (!PublicKeyCredential) {
+  try {
+    PublicKeyCredential;
+  } catch (err) {
     $("#error").text("Web Authentication API not found");
     $("button").addClass("inactive");
   }
 
-  state.version = "U2F_V2";
+  if (origin.startsWith("http://")) {
+    $("#error").text("Loaded outside of a secure context. It shouldn't work.");
+  }
 
   let success = true;
 
