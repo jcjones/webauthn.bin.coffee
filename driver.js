@@ -331,7 +331,7 @@ function asn1Okay(asn1) {
 
 $(document).ready(function() {
   try {
-    PublicKeyCredential;
+    CredentialsContainer;
   } catch (err) {
     $("#error").text("Web Authentication API not found");
     $("button").addClass("inactive");
