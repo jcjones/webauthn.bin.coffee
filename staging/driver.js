@@ -465,7 +465,11 @@ $(document).ready(function() {
 
       testEqual("createOut", b64enc(challengeBytes), clientData.challenge, "Challenge matches");
       testEqual("createOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
-      testEqual("createOut", "webauthn.create", clientData.type, "Type is valid (WD-08)");
+      if ("type" in clientData) {
+        testEqual("createOut", "webauthn.create", clientData.type, "Type is valid (WD-08)");
+      } else {
+        gResults.todo("clientData.type is not set (WD-08)");
+      }
 
     }).then(function (){
       append("createOut", "\n\nRaw request:\n");
@@ -524,7 +528,12 @@ $(document).ready(function() {
       let clientData = JSON.parse(buffer2string(aAssertion.response.clientDataJSON));
       testEqual("getOut", clientData.challenge, b64enc(challengeBytes), "Challenge is identical");
       testEqual("getOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
-      testEqual("createOut", "webauthn.get", clientData.type, "Type is valid (WD-08)");
+      if ("type" in clientData) {
+        testEqual("createOut", "webauthn.get", clientData.type, "Type is valid (WD-08)");
+      } else {
+        gResults.todo("clientData.type is not set (WD-08)");
+      }
+
 
       return webAuthnDecodeAuthDataArray(aAssertion.response.authenticatorData)
       .then(function (aAttestation) {
