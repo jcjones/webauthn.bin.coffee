@@ -331,7 +331,7 @@ function asn1Okay(asn1) {
 
 $(document).ready(function() {
   try {
-    CredentialsContainer;
+    PublicKeyCredential;
   } catch (err) {
     $("#error").text("Web Authentication API not found");
     $("button").addClass("inactive");
@@ -475,9 +475,15 @@ $(document).ready(function() {
       append("createOut", "\n\nRaw request:\n");
       append("createOut", JSON.stringify(createRequest, null, 2) + "\n\n");
     }).catch(function (aErr) {
-      gResults.fail();
-      append("createOut", "Got error:\n");
-      append("createOut", aErr.toString() + "\n\n");
+      if (aErr == "AbortError" || ("name" in aErr && aErr.name == "NS_ERROR_ABORT")) {
+        gResults.reset();
+        gResults.todo();
+        append("createOut", "Aborted; retry?\n");
+      } else {
+        gResults.fail();
+        append("createOut", "Got error:\n");
+        append("createOut", aErr.toString() + "\n\n");
+      }
     }).then(function (){
       resultColor("createOut");
       append("createOut", gResults.toString());
@@ -581,13 +587,19 @@ $(document).ready(function() {
       .then(function(aSignatureValid) {
         test("getOut", aSignatureValid, "The token signature must be valid.");
       });
-    }).catch(function (aErr) {
-      gResults.fail();
-      append("getOut", "Got error:\n");
-      append("getOut", aErr.toString() + "\n\n");
     }).then(function (){
       append("getOut", "\n\nRaw request:\n");
       append("getOut", JSON.stringify(publicKeyCredentialRequestOptions, null, 2) + "\n\n");
+    }).catch(function (aErr) {
+      if (aErr == "AbortError" || ("name" in aErr && aErr.name == "NS_ERROR_ABORT")) {
+        gResults.reset();
+        gResults.todo();
+        append("getOut", "Aborted; retry?\n");
+      } else {
+        gResults.fail();
+        append("getOut", "Got error:\n");
+        append("getOut", aErr.toString() + "\n\n");
+      }
     }).then(function (){
       resultColor("getOut");
       append("getOut", gResults.toString());
