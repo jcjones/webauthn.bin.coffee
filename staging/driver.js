@@ -367,7 +367,7 @@ $(document).ready(function() {
 
       pubKeyCredParams: [
         {
-          alg: -7,
+          alg: cose_alg_ECDSA_w_SHA256,
           type: "public-key",
         }
       ],
