@@ -408,7 +408,7 @@ $(document).ready(function() {
         return Promise.resolve(aAttestation);
       });
     })
-    .then(function (aAttestation) {
+    .then(async function (aAttestation) {
       let flags = new Uint8Array(aAttestation.flags);
       testEqual("createOut", flags, (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
       testEqual("createOut", hexEncode(aAttestation.attestationAuthData.credId), hexEncode(state.createResponse.rawId), "Credential ID from CBOR and Raw ID match");
@@ -430,7 +430,7 @@ $(document).ready(function() {
       }
 
       state.attestationCertDER = aAttestation.attestationObject.attStmt.x5c[0];
-      append("createOut", "DER-encoded Certificate: " + hexEncode(state.attestationCertDER) + "\n");
+      append("createOut", "DER-encoded Certificate: " + b64enc(state.attestationCertDER) + "\n");
 
       let certAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationCertDER));
       if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate parsed")) {
@@ -448,6 +448,14 @@ $(document).ready(function() {
       if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature parsed")) {
         throw "Attestation Signature failed to validate";
       }
+
+      await state.attestationCert.verify()
+      .then((result) => {
+        test("createOut", result, "Attestation certificate signature verified successfully");
+      })
+      .catch((error) => {
+        append("createOut", "[NOTE] Attestation cert signature verification couldn't continue, probably because of a lack of issuer cert: " + error + "\n");
+      });
 
       testEqual("createOut", sigAsn1.result.block_length, getArrayBuffer("createOut", state.attestationSig).byteLength, "Signature buffer has no unnecessary bytes.");
 
