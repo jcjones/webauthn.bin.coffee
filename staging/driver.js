@@ -195,15 +195,73 @@ function webAuthnDecodeCBORAttestation(aCborAttBuf) {
   if (!("authData" in attObj && "fmt" in attObj && "attStmt" in attObj)) {
     throw "Invalid CBOR Attestation Object";
   }
-  if (!("sig" in attObj.attStmt && "x5c" in attObj.attStmt)) {
-    throw "Invalid CBOR Attestation Statement";
+
+  if (attObj.fmt == "fido-u2f") {
+    if (!("sig" in attObj.attStmt && "x5c" in attObj.attStmt)) {
+      throw "Invalid CBOR Attestation Statement";
+    }
+
+    append("createOut", "\n:: FIDO-U2F Attestation Format ::\n");
+    return webAuthnDecodeAuthDataArray(new Uint8Array(attObj.authData))
+    .then(async function (aAttestationObj) {
+
+      /* Decode U2F Attestation Certificates */
+      append("createOut", "\n:: Attestation Certificate Information ::\n");
+      if (attObj.attStmt.x5c.length != 1) {
+        throw "Can't yet handle cert chains != 1 cert long";
+      }
+
+      state.attestationCertDER = attObj.attStmt.x5c[0];
+      append("createOut", "DER-encoded Certificate: " + b64enc(state.attestationCertDER) + "\n");
+
+      let certAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationCertDER));
+      if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate parsed")) {
+        throw "Attestation Certificate didn't parse correctly.";
+      }
+
+      state.attestationCert = new org.pkijs.simpl.CERT({ schema: certAsn1.result });
+      append("createOut", "Attestation Cert\n");
+      append("createOut", "Subject: " + state.attestationCert.subject.types_and_values[0].value.value_block.value + "\n");
+      append("createOut", "Issuer: " + state.attestationCert.issuer.types_and_values[0].value.value_block.value + "\n");
+      append("createOut", "Validity (in millis): " + (state.attestationCert.notAfter.value - state.attestationCert.notBefore.value + "\n"));
+
+      state.attestationSig = attObj.attStmt.sig;
+      let sigAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationSig));
+      if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature parsed")) {
+        throw "Attestation Signature failed to validate";
+      }
+
+      await state.attestationCert.verify()
+      .then((result) => {
+        test("createOut", result, "Attestation certificate signature verified successfully");
+      })
+      .catch((error) => {
+        append("createOut", "[NOTE] Attestation cert signature verification couldn't continue, probably because of a lack of issuer cert: " + error + "\n");
+      });
+
+      testEqual("createOut", sigAsn1.result.block_length, getArrayBuffer("createOut", state.attestationSig).byteLength, "Signature buffer has no unnecessary bytes.");
+
+      append("createOut", "Attestation Signature (by the key in the cert, over the new credential):\n");
+      let R = new Uint8Array(sigAsn1.result.value_block.value[0].value_block.value_hex);
+      let S = new Uint8Array(sigAsn1.result.value_block.value[1].value_block.value_hex);
+      append("createOut", "R-component: " + hexEncode(R) + "\n");
+      append("createOut", "S-component: " + hexEncode(S) + "\n");
+
+      aAttestationObj.attestationObject = attObj;
+      return Promise.resolve(aAttestationObj);
+    });
   }
 
-  return webAuthnDecodeAuthDataArray(new Uint8Array(attObj.authData))
-  .then(function (aAttestationObj) {
-    aAttestationObj.attestationObject = attObj;
-    return Promise.resolve(aAttestationObj);
-  });
+  if (attObj.fmt == "none") {
+    append("createOut", "\n:: \"None\" Attestation Format ::\n");
+    return webAuthnDecodeAuthDataArray(new Uint8Array(attObj.authData))
+    .then(function (aAttestationObj) {
+      aAttestationObj.attestationObject = attObj;
+      return Promise.resolve(aAttestationObj);
+    });
+  }
+
+  return Promise.reject("Unknown attestation format: " + attObj.fmt)
 }
 
 function webAuthnDecodeAuthDataArray(aAuthData) {
@@ -378,16 +436,22 @@ $(document).ready(function() {
         userVerification: "preferred"
       },
 
-      attestation: "direct",
+      attestation: undefined,
       timeout: 60000,  // 1 minute
       excludeCredentials: [], // No excludeList
       extensions: { "exts": true }
     };
+
     let rpid = document.domain;
     if ($("#rpIdText").val()) {
       rpid = $("#rpIdText").val();
       createRequest.rp.id = rpid;
     }
+
+    if ($("#attestationType").val() != "") {
+      createRequest.attestation = $("#attestationType").val();
+    }
+
     state.createRequest = createRequest;
 
     navigator.credentials.create({ publicKey: createRequest })
@@ -423,47 +487,6 @@ $(document).ready(function() {
       append("createOut", "Counter: " + hexEncode(aAttestation.counter) + " Flags: " + flags + "\n");
       append("createOut", "AAGUID: " + hexEncode(aAttestation.attestationAuthData.aaguid) + "\n");
 
-      /* Decode U2F Attestation Certificates */
-      append("createOut", "\n:: Attestation Certificate Information ::\n");
-      if (aAttestation.attestationObject.attStmt.x5c.length != 1) {
-        throw "Can't yet handle cert chains != 1 cert long";
-      }
-
-      state.attestationCertDER = aAttestation.attestationObject.attStmt.x5c[0];
-      append("createOut", "DER-encoded Certificate: " + b64enc(state.attestationCertDER) + "\n");
-
-      let certAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationCertDER));
-      if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate parsed")) {
-        throw "Attestation Certificate didn't parse correctly.";
-      }
-
-      state.attestationCert = new org.pkijs.simpl.CERT({ schema: certAsn1.result });
-      append("createOut", "Attestation Cert\n");
-      append("createOut", "Subject: " + state.attestationCert.subject.types_and_values[0].value.value_block.value + "\n");
-      append("createOut", "Issuer: " + state.attestationCert.issuer.types_and_values[0].value.value_block.value + "\n");
-      append("createOut", "Validity (in millis): " + (state.attestationCert.notAfter.value - state.attestationCert.notBefore.value + "\n"));
-
-      state.attestationSig = aAttestation.attestationObject.attStmt.sig;
-      let sigAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationSig));
-      if (!test("createOut", asn1Okay(certAsn1), "Attestation Signature parsed")) {
-        throw "Attestation Signature failed to validate";
-      }
-
-      await state.attestationCert.verify()
-      .then((result) => {
-        test("createOut", result, "Attestation certificate signature verified successfully");
-      })
-      .catch((error) => {
-        append("createOut", "[NOTE] Attestation cert signature verification couldn't continue, probably because of a lack of issuer cert: " + error + "\n");
-      });
-
-      testEqual("createOut", sigAsn1.result.block_length, getArrayBuffer("createOut", state.attestationSig).byteLength, "Signature buffer has no unnecessary bytes.");
-
-      append("createOut", "Attestation Signature (by the key in the cert, over the new credential):\n");
-      let R = new Uint8Array(sigAsn1.result.value_block.value[0].value_block.value_hex);
-      let S = new Uint8Array(sigAsn1.result.value_block.value[1].value_block.value_hex);
-      append("createOut", "R-component: " + hexEncode(R) + "\n");
-      append("createOut", "S-component: " + hexEncode(S) + "\n");
 
       /* Decode Client Data */
       append("createOut", "\n:: Client Data Information ::\n");
