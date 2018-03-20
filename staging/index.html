@@ -2,7 +2,7 @@
 <html>
 
 <head>
-<title>WebAuthn checker - W3C WD-07 Mode</title>
+<title>WebAuthn checker - W3C CR Mode</title>
 <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
 <script type="text/javascript" src="/base64.js"></script>
 <script type="text/javascript" src="/pkijs/common.js"></script>
@@ -98,7 +98,7 @@ pre {
 <body>
 <div id="container">
  <div class="row">
-  <p><strong>This is the W3C attestation mode checker. It's a <big>work-in-progress</big>.</strong> Other checkers available:</p>
+  <p><strong>This is the CR attestation mode checker. It's a <big>work-in-progress</big>.</strong> Other checkers available:</p>
   <ol>
    <li><a href="/origin">RPID is Origin w/ Firefox attestation mode (<strong>Firefox 55</strong>)</a></li>
    <li><a href="/domainstring">RPID is Domain String w/ Firefox attestation mode (<strong>Historical anomaly</strong>)</a></li>
@@ -109,17 +109,7 @@ pre {
   <p>You can also load <a href="https://webauthn.bin.coffee:8443">this page on port 8443 to test</a> that alternate ports work for a given RP ID.</p>
  </div>
  <div class="row">
-  <p>To use this to test Web Authentication support in Firefox, do the following:</p>
-  <ol>
-   <li>Open the Firefox advanced preferences in <a href="about:config">about:config</a>.</li>
-   <li>Search for "webauth"</li>
-   <li>Enable (value=True) this:
-    <ul>
-      <li><tt>security.webauth.webauthn</tt></li>
-    </ul>
-   </li>
-   <li>Reload this page and click buttons!</li>
-  </ol>
+  <p>To use this to test Web Authentication support in Firefox, be sure you're using Firefox 60 or later.</p>
  </div>
 
  <div class="row">

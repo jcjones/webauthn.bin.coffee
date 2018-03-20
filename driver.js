@@ -506,9 +506,8 @@ $(document).ready(function() {
       append("createOut", "\n\nRaw request:\n");
       append("createOut", JSON.stringify(createRequest, null, 2) + "\n\n");
     }).catch(function (aErr) {
-      if (aErr == "AbortError" || ("name" in aErr && aErr.name == "NS_ERROR_ABORT")) {
+      if ("name" in aErr && (aErr.name == "AbortError" || aErr.name == "NS_ERROR_ABORT")) {
         gResults.reset();
-        gResults.todo();
         append("createOut", "Aborted; retry?\n");
       } else {
         gResults.fail();
@@ -517,7 +516,7 @@ $(document).ready(function() {
       }
     }).then(function (){
       resultColor("createOut");
-      append("createOut", gResults.toString());
+      append("createOut", gResults.toString() + "\n\n");
     });
   });
 
@@ -622,9 +621,8 @@ $(document).ready(function() {
       append("getOut", "\n\nRaw request:\n");
       append("getOut", JSON.stringify(publicKeyCredentialRequestOptions, null, 2) + "\n\n");
     }).catch(function (aErr) {
-      if (aErr == "AbortError" || ("name" in aErr && aErr.name == "NS_ERROR_ABORT")) {
+      if ("name" in aErr && (aErr.name == "AbortError" || aErr.name == "NS_ERROR_ABORT")) {
         gResults.reset();
-        gResults.todo();
         append("getOut", "Aborted; retry?\n");
       } else {
         gResults.fail();
@@ -633,7 +631,7 @@ $(document).ready(function() {
       }
     }).then(function (){
       resultColor("getOut");
-      append("getOut", gResults.toString());
+      append("getOut", gResults.toString() + "\n\n");
     });
 
   });
