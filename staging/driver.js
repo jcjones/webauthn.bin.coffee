@@ -395,7 +395,7 @@ $(document).ready(function() {
     $("button").addClass("inactive");
   }
 
-  if (origin.startsWith("http://")) {
+  if (document.location.origin.startsWith("http://")) {
     $("#error").text("Loaded outside of a secure context. It shouldn't work.");
   }
 
