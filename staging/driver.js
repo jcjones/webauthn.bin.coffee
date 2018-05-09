@@ -211,8 +211,9 @@ function webAuthnDecodeCBORAttestation(aCborAttBuf) {
         throw "Can't yet handle cert chains != 1 cert long";
       }
 
-      state.attestationCertDER = attObj.attStmt.x5c[0];
-      append("createOut", "DER-encoded Certificate: " + b64enc(state.attestationCertDER) + "\n");
+      state.attestationCertDER = base64js.fromByteArray(new Uint8Array(getArrayBuffer("createOut", attObj.attStmt.x5c[0])));
+      append("createOut", "PEM-encoded Certificate:\n-----BEGIN CERTIFICATE-----\n" + state.attestationCertDER.replace(/(.{60})/g, "$1\n") + "\n-----END CERTIFICATE-----\n");
+      console.log("DER-encoded Certificate: ", state.attestationCertDER);
 
       let certAsn1 = org.pkijs.fromBER(getArrayBuffer("createOut", state.attestationCertDER));
       if (!test("createOut", asn1Okay(certAsn1), "Attestation Certificate parsed")) {
