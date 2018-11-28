@@ -475,7 +475,7 @@ $(document).ready(function() {
     })
     .then(async function (aAttestation) {
       let flags = new Uint8Array(aAttestation.flags);
-      testEqual("createOut", flags, (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
+      testEqual("createOut", flags & (flag_TUP | flag_AT) , (flag_TUP | flag_AT), "User presence and Attestation Object must both be set");
       testEqual("createOut", hexEncode(aAttestation.attestationAuthData.credId), hexEncode(state.createResponse.rawId), "Credential ID from CBOR and Raw ID match");
       state.keyHandle = state.createResponse.rawId;
       append("createOut", "Keypair Identifier: " + hexEncode(state.keyHandle) + "\n");

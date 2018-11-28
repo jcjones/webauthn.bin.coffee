@@ -98,13 +98,8 @@ pre {
 <body>
 <div id="container">
  <div class="row">
-  <p><strong>This is the CR attestation mode checker. It's a <big>work-in-progress</big>.</strong> Other checkers available:</p>
-  <ol>
-   <li><a href="/origin">RPID is Origin w/ Firefox attestation mode (<strong>Firefox 55</strong>)</a></li>
-   <li><a href="/domainstring">RPID is Domain String w/ Firefox attestation mode (<strong>Historical anomaly</strong>)</a></li>
-   <li><a href="/wd-05">WD-05 Mode (<strong>Firefox 56</strong>)</a></li>
-   <li><a href="/ff58">Firefox 58 Mode</a></li>
-  </ol>
+  <p><strong>This is the CR attestation mode checker. It's a <big>work-in-progress</big>.</strong>. Code is <a href="https://github.com/jcjones/webauthn.bin.coffee/">on Github</a>, though deployment is manual.</p>
+
   <p>You can <a href="/iframe.html">open this page inside an iframe for testing</a> as well, or <a href="https://u2f.bin.coffee/iframe-webauthn.html">open a cross-origin iframe (which is prohibited and will give an error)</a>.</p>
   <p>You can also load <a href="https://webauthn.bin.coffee:8443">this page on port 8443 to test</a> that alternate ports work for a given RP ID.</p>
  </div>
@@ -129,7 +124,7 @@ pre {
 
   <div class="box">
     <p class="subtitle">Advanced</p>
-    <p>Relying Party ID to use. "<tt>bin.coffee</tt>" and "<tt>webauthn.bin.coffee</tt>" should be the only valid options.</p>
+    <p>Relying Party ID to use. "<tt>bin.coffee</tt>" and "<tt>webauthn.bin.coffee</tt>" should be the only valid options. Ports, paths, schema and such should be forbidden.</p>
     <input id="rpIdText" type="text" size="50"/>
     <p>Attestation type.</p>
     <select id="attestationType">
