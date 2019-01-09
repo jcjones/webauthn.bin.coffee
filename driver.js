@@ -583,7 +583,7 @@ $(document).ready(function() {
         });
       })
       .then(function(aAttestation) {
-        if (!testEqual("getOut", new Uint8Array(aAttestation.flags), flag_TUP, "User presence must be the only flag set")) {
+        if (!testEqual("getOut", new Uint8Array(aAttestation.flags) & flag_TUP, flag_TUP, "User presence must be the only flag set")) {
           throw "Assertion's user presence byte not set correctly.";
         }
 
