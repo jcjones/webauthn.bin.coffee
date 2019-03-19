@@ -496,7 +496,11 @@ $(document).ready(function() {
       append("createOut", JSON.stringify(clientData, null, 2) + "\n\n");
 
       testEqual("createOut", b64enc(challengeBytes), clientData.challenge, "Challenge matches");
-      testEqual("createOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      if ("androidPackageName" in clientData) {
+        append("createOut", `Android origin is: ${clientData.origin} (unchecked)`)
+      } else {
+        testEqual("createOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      }
       if ("type" in clientData) {
         testEqual("createOut", "webauthn.create", clientData.type, "Type is valid (WD-08)");
       } else {
@@ -564,7 +568,11 @@ $(document).ready(function() {
 
       let clientData = JSON.parse(buffer2string(aAssertion.response.clientDataJSON));
       testEqual("getOut", clientData.challenge, b64enc(challengeBytes), "Challenge is identical");
-      testEqual("getOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      if ("androidPackageName" in clientData) {
+        append("getOut", `Android origin is: ${clientData.origin} (unchecked)`)
+      } else {
+        testEqual("getOut", window.location.origin, clientData.origin, "ClientData.origin matches this origin (WD-06)");
+      }
       if ("type" in clientData) {
         testEqual("createOut", "webauthn.get", clientData.type, "Type is valid (WD-08)");
       } else {
