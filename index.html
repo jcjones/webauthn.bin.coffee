@@ -10,6 +10,7 @@
 <script type="text/javascript" src="/pkijs/x509_schema.js"></script>
 <script type="text/javascript" src="/pkijs/x509_simpl.js"></script>
 <script type="text/javascript" src="/cbor.js"></script>
+<script type="text/javascript" src="/u2f-api.js"></script>
 <script type="text/javascript" src="driver.js"></script>
 <style>
 * {
@@ -133,7 +134,7 @@ pre {
       <option value="indirect">Indirect</option>
       <option value="none">None</option>
     </select>
-    <p>FIDO AppID to use. (If set, will use U2F for registration and the AppID compatibility extension. "<tt>https://bin.coffee/AppId</tt>" and "<tt>https://webauthn.bin.coffee/</tt>" are valid options.)</p>
+    <p>FIDO AppID to use. (If set, will use U2F for registration and the AppID compatibility extension. "<tt>https://bin.coffee/AppId</tt>" and "<tt>https://webauthn.bin.coffee/</tt>" are valid options for Firefox. Only "<tt>https://webauthn.bin.coffee/</tt>" is valid for Chrome.)</p>
     <input id="appIdText" type="text" size="50"/>
   </div>
 
