@@ -136,6 +136,8 @@ pre {
     </select>
     <p>FIDO AppID to use. (If set, will use U2F for registration and the AppID compatibility extension. "<tt>https://bin.coffee/AppId</tt>" and "<tt>https://webauthn.bin.coffee/</tt>" are valid options for Firefox. Only "<tt>https://webauthn.bin.coffee/</tt>" is valid for Chrome.)</p>
     <input id="appIdText" type="text" size="50"/>
+    <p>Should this page aggressively loop forever on an operation? (Test denial-of-service to WebAuthn)</p>
+    <input id="loopForever" type="checkbox"/>
   </div>
 
  </div>

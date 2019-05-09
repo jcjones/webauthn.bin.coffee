@@ -642,7 +642,10 @@ $(document).ready(function() {
     if ($("#appIdText").val()) {
       doU2FRegister(challengeBytes);
     } else {
-      doWebAuthnCreate(challengeBytes);
+
+      do {
+        doWebAuthnCreate(challengeBytes);
+      } while($("#loopForever").prop("checked"));
     }
   });
 
