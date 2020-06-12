@@ -548,6 +548,9 @@ function doWebAuthnCreate(challengeBytes) {
 
   state.createRequest = createRequest;
 
+  console.log("let createRequest = " + JSON.stringify(createRequest, null, 2));
+  console.log("navigator.credentials.create({ publicKey: createRequest })");
+
   navigator.credentials.create({ publicKey: createRequest })
   .then(function (aNewCredentialInfo) {
     state.createResponse = aNewCredentialInfo
@@ -707,23 +710,10 @@ $(document).ready(function() {
         gResults.todo("clientData.type is not set (WD-08)");
       }
 
+      append("getOut", `Extensions: ${JSON.stringify(aAssertion.getClientExtensionResults())}\n`);
+
       return webAuthnDecodeAuthDataArray(aAssertion.response.authenticatorData)
       .then(async function(aAttestation) {
-
-        let toHash = new TextEncoder("utf-8").encode(rpid)
-
-        if ($("#appIdText").val()) {
-          toHash = new TextEncoder("utf-8").encode($("#appIdText").val());
-        }
-
-        let calculatedHash = await crypto.subtle.digest("SHA-256", toHash);
-
-        // Make sure the RP ID hash matches what we calculate.
-        testEqual("getOut", b64enc(new Uint8Array(calculatedHash)), b64enc(new Uint8Array(aAttestation.rpIdHash)),
-                  "Calculated RP ID hash must match what the browser derived.");
-        return aAttestation;
-      })
-      .then(function(aAttestation) {
         if (!testEqual("getOut", new Uint8Array(aAttestation.flags) & flag_TUP, flag_TUP, "User presence must be the only flag set")) {
           throw "Assertion's user presence byte not set correctly.";
         }
@@ -739,17 +729,19 @@ $(document).ready(function() {
 
         // Assemble the signed data and verify the signature
         appId = document.domain
-        if ($("#rpIdText").val()) {
-          appId = $("#rpIdText").val();
-        }
 
-        if ($("#appIdText").val()) {
+        if ("appid" in aAssertion.getClientExtensionResults() && aAssertion.getClientExtensionResults().appid) {
           appId = $("#appIdText").val();
+          append("getOut", `AppID extension set, using ${appId} as the value to hash\n`);
+        } else if ($("#rpIdText").val()) {
+          appId = $("#rpIdText").val();
         }
 
         return deriveAppAndChallengeParam(appId, aAssertion.response.clientDataJSON, aAttestation);
       })
       .then(function(aParams) {
+        testEqual("getOut", b64enc(aParams.appParam), b64enc(new Uint8Array(aParams.attestation.rpIdHash)),
+                  "Calculated RP ID hash must match what the browser derived.");
         append("getOut", "ClientData buffer: " + hexEncode(aAssertion.response.clientDataJSON) + "\n\n");
         append("getOut", "ClientDataHash: " + hexEncode(aParams.challengeParam) + "\n\n");
         return assembleSignedData(aParams.appParam, aParams.attestation.flags,
