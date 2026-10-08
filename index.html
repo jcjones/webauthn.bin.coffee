@@ -21,7 +21,7 @@
 body {
   text-align: left;
   font-size: 10pt;
-  font-family: system, Helvetica, sans-serif;
+  font-family: system-ui, Helvetica, sans-serif;
 }
 
 #container {
@@ -99,10 +99,9 @@ pre {
 <body>
 <div id="container">
  <div class="row">
-  <p><strong>This is the Level 1 attestation mode checker. It's a <big>work-in-progress</big>.</strong>. Code is <a href="https://github.com/jcjones/webauthn.bin.coffee/">on Github</a>, though deployment is manual.</p>
+  <p><strong>This is the Level 1 attestation mode checker. It's a work-in-progress.</strong> Code is <a href="https://github.com/ABuljko/webauthn.bin.coffee/tree/master">on GitHub</a>, and the <code>master</code> branch is deployed to <a href="https://abuljko.github.io/webauthn.bin.coffee/">abuljko.github.io/webauthn.bin.coffee</a>.</p>
 
-  <p>You can <a href="/iframe.html">open this page inside an iframe for testing</a> as well, or <a href="https://u2f.bin.coffee/iframe-webauthn.html">open a cross-origin iframe (which is prohibited and will give an error)</a>.</p>
-  <p>You can also load <a href="https://webauthn.bin.coffee:8443">this page on port 8443 to test</a> that alternate ports work for a given RP ID.</p>
+  <p>You can <a href="iframe.html">open this page inside an iframe for testing</a> as well.</p>
  </div>
  <div class="row">
   <p>To use this to test Web Authentication support in Firefox, be sure you're using Firefox 60 or later.</p>
@@ -125,7 +124,7 @@ pre {
 
   <div class="box">
     <p class="subtitle">Advanced</p>
-    <p>Relying Party ID to use. "<tt>bin.coffee</tt>" and "<tt>webauthn.bin.coffee</tt>" should be the only valid options. Ports, paths, schema and such should be forbidden.</p>
+    <p>Relying Party ID to use. "<code>abuljko.github.io</code>" should be the only valid option (<code>github.io</code> is a public suffix, so it is rejected). Ports, paths, schema and such should be forbidden.</p>
     <input id="rpIdText" type="text" size="50"/>
     <p>Attestation type.</p>
     <select id="attestationType">
@@ -134,7 +133,7 @@ pre {
       <option value="indirect">Indirect</option>
       <option value="none">None</option>
     </select>
-    <p>FIDO AppID to use. (If set, Get Assertion will send it with the AppID compatibility extension. "<tt>https://bin.coffee/AppId</tt>" and "<tt>https://webauthn.bin.coffee/</tt>" are valid options for Firefox. Only "<tt>https://webauthn.bin.coffee/</tt>" is valid for Chrome.)</p>
+    <p>FIDO AppID to use. (If set, Get Assertion will send it with the AppID compatibility extension. For this deployment, use an AppID on this host, such as "<code>https://abuljko.github.io/webauthn.bin.coffee/</code>".)</p>
     <input id="appIdText" type="text" size="50"/>
     <p>Should this page aggressively loop forever on an operation? (Test denial-of-service to WebAuthn)</p>
     <input id="loopForever" type="checkbox"/>
