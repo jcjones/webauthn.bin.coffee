@@ -4,14 +4,8 @@
 <head>
 <title>WebAuthn checker - W3C Level 1 Mode</title>
 <meta charset="utf-8"/>
-<script type="text/javascript" src="assets/jquery.min.js"></script>
-<script type="text/javascript" src="base64.js"></script>
-<script type="text/javascript" src="pkijs/common.js"></script>
-<script type="text/javascript" src="pkijs/asn1.js"></script>
-<script type="text/javascript" src="pkijs/x509_schema.js"></script>
-<script type="text/javascript" src="pkijs/x509_simpl.js"></script>
-<script type="text/javascript" src="cbor.js"></script>
-<script type="text/javascript" src="driver.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<script type="module" src="driver.js"></script>
 <style>
 * {
   margin: 0;
@@ -110,13 +104,11 @@ pre {
  <div class="row">
   <p id="error"></p>
 
-  <!-- registration -->
   <div class="box">
     <button id="createButton">Create Credential</button>
     <pre id="createOut"></pre>
   </div>
 
-  <!-- sign -->
   <div class="box">
     <button id="getButton">Get Assertion</button>
     <pre id="getOut"></pre>

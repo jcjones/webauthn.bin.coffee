@@ -22,30 +22,30 @@
  * SOFTWARE.
  */
 
-(function(global) { "use strict";
-var POW_2_24 = 5.960464477539063e-8,
-    POW_2_32 = 4294967296,
-    POW_2_53 = 9007199254740992;
+const POW_2_24 = 5.960464477539063e-8;
+const POW_2_32 = 4294967296;
+const POW_2_53 = 9007199254740992;
 
-function decode(data) {
-  var dataView = new DataView(data);
-  var offset = 0;
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+// Decodes exactly one CBOR item from an ArrayBuffer. Throws a RangeError when
+// the input is truncated, and an Error for any other malformed input.
+export function decode(data) {
+  const dataView = new DataView(data);
+  let offset = 0;
 
   function commitRead(length, value) {
     offset += length;
     return value;
   }
-  function readArrayBuffer(length) {
+  function readBytes(length) {
     return commitRead(length, new Uint8Array(data, offset, length));
   }
   function readFloat16() {
-    var tempArrayBuffer = new ArrayBuffer(4);
-    var tempDataView = new DataView(tempArrayBuffer);
-    var value = readUint16();
-
-    var sign = value & 0x8000;
-    var exponent = value & 0x7c00;
-    var fraction = value & 0x03ff;
+    const value = readUint16();
+    const sign = value & 0x8000;
+    let exponent = value & 0x7c00;
+    const fraction = value & 0x03ff;
 
     if (exponent === 0x7c00)
       exponent = 0xff << 10;
@@ -54,28 +54,19 @@ function decode(data) {
     else if (fraction !== 0)
       return (sign ? -1 : 1) * fraction * POW_2_24;
 
+    const tempDataView = new DataView(new ArrayBuffer(4));
     tempDataView.setUint32(0, sign << 16 | exponent << 13 | fraction << 13);
     return tempDataView.getFloat32(0);
   }
-  function readFloat32() {
-    return commitRead(4, dataView.getFloat32(offset));
-  }
-  function readFloat64() {
-    return commitRead(8, dataView.getFloat64(offset));
-  }
-  function readUint8() {
-    return commitRead(1, dataView.getUint8(offset));
-  }
-  function readUint16() {
-    return commitRead(2, dataView.getUint16(offset));
-  }
-  function readUint32() {
-    return commitRead(4, dataView.getUint32(offset));
-  }
+  const readFloat32 = () => commitRead(4, dataView.getFloat32(offset));
+  const readFloat64 = () => commitRead(8, dataView.getFloat64(offset));
+  const readUint8 = () => commitRead(1, dataView.getUint8(offset));
+  const readUint16 = () => commitRead(2, dataView.getUint16(offset));
+  const readUint32 = () => commitRead(4, dataView.getUint32(offset));
   function readUint64() {
-    var high = readUint32();
+    const high = readUint32();
     if (high >= POW_2_53 / POW_2_32)
-      throw "Integer too large to represent exactly";
+      throw new Error("Integer too large to represent exactly");
     return high * POW_2_32 + readUint32();
   }
   function readBreak() {
@@ -87,135 +78,115 @@ function decode(data) {
   function readLength(additionalInformation) {
     if (additionalInformation < 24)
       return additionalInformation;
-    if (additionalInformation === 24)
-      return readUint8();
-    if (additionalInformation === 25)
-      return readUint16();
-    if (additionalInformation === 26)
-      return readUint32();
-    if (additionalInformation === 27)
-      return readUint64();
-    if (additionalInformation === 31)
-      return -1;
-    throw "Invalid length encoding";
+    switch (additionalInformation) {
+      case 24: return readUint8();
+      case 25: return readUint16();
+      case 26: return readUint32();
+      case 27: return readUint64();
+      case 31: return -1;
+    }
+    throw new Error("Invalid length encoding");
   }
   function readIndefiniteStringLength(majorType) {
-    var initialByte = readUint8();
+    const initialByte = readUint8();
     if (initialByte === 0xff)
       return -1;
-    var length = readLength(initialByte & 0x1f);
+    const length = readLength(initialByte & 0x1f);
     if (length < 0 || (initialByte >> 5) !== majorType)
-      throw "Invalid indefinite length element";
+      throw new Error("Invalid indefinite length element");
     return length;
   }
+  const readUtf8String = length => utf8Decoder.decode(readBytes(length));
 
-  var utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-  function readUtf8String(length) {
-    return utf8Decoder.decode(readArrayBuffer(length));
+  function readMap(length) {
+    const map = {};
+    for (let i = 0; i < length || (length < 0 && !readBreak()); ++i) {
+      const key = decodeItem();
+      if (Object.hasOwn(map, key))
+        throw new Error("Duplicate map key: " + key);
+      // Plain assignment would let a "__proto__" key replace the prototype.
+      Object.defineProperty(map, key, {
+        value: decodeItem(),
+        writable: true,
+        enumerable: true,
+        configurable: true
+      });
+    }
+    return map;
   }
 
   function decodeItem() {
-    var initialByte = readUint8();
-    var majorType = initialByte >> 5;
-    var additionalInformation = initialByte & 0x1f;
-    var i;
-    var length;
+    const initialByte = readUint8();
+    const majorType = initialByte >> 5;
+    const additionalInformation = initialByte & 0x1f;
 
     if (majorType === 7) {
       switch (additionalInformation) {
-        case 25:
-          return readFloat16();
-        case 26:
-          return readFloat32();
-        case 27:
-          return readFloat64();
+        case 25: return readFloat16();
+        case 26: return readFloat32();
+        case 27: return readFloat64();
       }
     }
 
-    length = readLength(additionalInformation);
+    let length = readLength(additionalInformation);
     if (length < 0 && (majorType < 2 || 5 < majorType))
-      throw "Invalid length";
+      throw new Error("Invalid length");
 
     switch (majorType) {
       case 0:
         return length;
       case 1:
         return -1 - length;
-      case 2:
-        if (length < 0) {
-          var elements = [];
-          var fullArrayLength = 0;
-          while ((length = readIndefiniteStringLength(majorType)) >= 0) {
-            fullArrayLength += length;
-            elements.push(readArrayBuffer(length));
-          }
-          var fullArray = new Uint8Array(fullArrayLength);
-          var fullArrayOffset = 0;
-          for (i = 0; i < elements.length; ++i) {
-            fullArray.set(elements[i], fullArrayOffset);
-            fullArrayOffset += elements[i].length;
-          }
-          return fullArray;
+      case 2: {
+        if (length >= 0)
+          return readBytes(length);
+        const chunks = [];
+        while ((length = readIndefiniteStringLength(majorType)) >= 0)
+          chunks.push(readBytes(length));
+        const bytes = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+        let bytesOffset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, bytesOffset);
+          bytesOffset += chunk.length;
         }
-        return readArrayBuffer(length);
-      case 3:
+        return bytes;
+      }
+      case 3: {
+        if (length >= 0)
+          return readUtf8String(length);
+        const chunks = [];
+        while ((length = readIndefiniteStringLength(majorType)) >= 0)
+          chunks.push(readUtf8String(length));
+        return chunks.join("");
+      }
+      case 4: {
+        const array = [];
         if (length < 0) {
-          var chunks = [];
-          while ((length = readIndefiniteStringLength(majorType)) >= 0)
-            chunks.push(readUtf8String(length));
-          return chunks.join("");
-        }
-        return readUtf8String(length);
-      case 4:
-        var retArray;
-        if (length < 0) {
-          retArray = [];
           while (!readBreak())
-            retArray.push(decodeItem());
+            array.push(decodeItem());
         } else {
-          retArray = new Array(length);
-          for (i = 0; i < length; ++i)
-            retArray[i] = decodeItem();
+          for (let i = 0; i < length; ++i)
+            array.push(decodeItem());
         }
-        return retArray;
+        return array;
+      }
       case 5:
-        var retObject = {};
-        for (i = 0; i < length || length < 0 && !readBreak(); ++i) {
-          var key = decodeItem();
-          if (Object.prototype.hasOwnProperty.call(retObject, key))
-            throw "Duplicate map key: " + key;
-          // Plain assignment would let a "__proto__" key replace the prototype.
-          Object.defineProperty(retObject, key, {
-            value: decodeItem(),
-            writable: true,
-            enumerable: true,
-            configurable: true
-          });
-        }
-        return retObject;
+        return readMap(length);
       case 6:
         // Tags are not interpreted; return the tagged item itself.
         return decodeItem();
       case 7:
         switch (length) {
-          case 20:
-            return false;
-          case 21:
-            return true;
-          case 22:
-            return null;
-          default:
-            return undefined;
+          case 20: return false;
+          case 21: return true;
+          case 22: return null;
+          default: return undefined;
         }
     }
   }
 
-  var ret = decodeItem();
+  const ret = decodeItem();
   if (offset !== data.byteLength)
-    throw "Remaining bytes";
+    throw new Error("Remaining bytes");
   return ret;
 }
-
-global.CBOR = { decode: decode };
-
-})(this);
