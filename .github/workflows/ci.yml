@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      # assets/pkijs.js is a committed build artifact. Any change to
+      # scripts/pkijs-entry.js or a pkijs/asn1js/esbuild bump must also
+      # commit the rebuilt bundle.
+      - name: Check assets/pkijs.js is up to date
+        run: |
+          npm run build
+          if ! git diff --quiet -- assets/pkijs.js; then
+            echo "::error file=assets/pkijs.js::Bundle is stale; run 'npm run build' and commit the result."
+            exit 1
+          fi
+
+      - name: Syntax check
+        run: git ls-files '*.js' ':!assets/' | xargs -n1 node --check
