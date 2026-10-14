@@ -36,5 +36,4 @@ jobs:
             exit 1
           fi
 
-      - name: Syntax check
-        run: git ls-files '*.js' ':!assets/' | xargs -n1 node --check
+      - run: npm run lint
