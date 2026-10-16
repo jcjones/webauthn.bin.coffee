@@ -117,10 +117,6 @@ function concatBytes(...parts) {
   return out;
 }
 
-function assembleSignedData(rpIdHash, flags, counter, clientDataHash) {
-  return concatBytes(rpIdHash, flags, counter, clientDataHash);
-}
-
 function assembleRegistrationSignedData(rpIdHash, clientDataHash, credId, publicKeyBytes) {
   return concatBytes([0x00], rpIdHash, clientDataHash, credId, publicKeyBytes);
 }
@@ -144,8 +140,7 @@ const state = window.state = {
 };
 
 function isCborMap(aValue) {
-  return aValue !== null && typeof aValue === "object"
-         && !Array.isArray(aValue) && !(aValue instanceof Uint8Array);
+  return aValue instanceof Map;
 }
 
 const dnNames = { "2.5.4.3": "CN", "2.5.4.6": "C", "2.5.4.7": "L", "2.5.4.8": "ST", "2.5.4.10": "O", "2.5.4.11": "OU" };
@@ -159,19 +154,25 @@ function formatName(name) {
 async function webAuthnDecodeCBORAttestation(aCborAttBuf, aClientDataJSON) {
   const attObj = CBOR.decode(aCborAttBuf);
   console.log(":: Attestation CBOR Object ::", attObj);
-  if (!(isCborMap(attObj) && typeof attObj.fmt === "string"
-        && attObj.authData instanceof Uint8Array && isCborMap(attObj.attStmt))) {
+  if (!isCborMap(attObj)) {
+    throw new Error("Invalid CBOR Attestation Object");
+  }
+  const fmt = attObj.get("fmt");
+  const authData = attObj.get("authData");
+  const attStmt = attObj.get("attStmt");
+  if (!(typeof fmt === "string" && authData instanceof Uint8Array && isCborMap(attStmt))) {
     throw new Error("Invalid CBOR Attestation Object");
   }
 
-  if (attObj.fmt == "fido-u2f") {
-    const { sig, x5c } = attObj.attStmt;
+  if (fmt == "fido-u2f") {
+    const sig = attStmt.get("sig");
+    const x5c = attStmt.get("x5c");
     if (!(sig instanceof Uint8Array && Array.isArray(x5c) && x5c.every(c => c instanceof Uint8Array))) {
       throw new Error("Invalid CBOR Attestation Statement");
     }
 
     append("createOut", "\n:: FIDO-U2F Attestation Format ::\n");
-    const attestation = await webAuthnDecodeAuthDataArray(attObj.authData);
+    const attestation = await webAuthnDecodeAuthDataArray(authData);
 
     append("createOut", "\n:: Attestation Certificate Information ::\n");
     if (x5c.length != 1) {
@@ -199,6 +200,12 @@ async function webAuthnDecodeCBORAttestation(aCborAttBuf, aClientDataJSON) {
       append("createOut", `[NOTE] Attestation cert signature verification couldn't continue, probably because of a lack of issuer cert: ${error}\n`);
     }
 
+    const certKeyInfo = cert.subjectPublicKeyInfo;
+    if (certKeyInfo.algorithm.algorithmId != "1.2.840.10045.2.1"
+        || certKeyInfo.algorithm.algorithmParams?.valueBlock?.toString() != "1.2.840.10045.3.1.7") {
+      throw new Error("Attestation certificate key must be an EC P-256 key");
+    }
+
     state.attestationSig = sig;
     const { r, s } = parseDerSignature(sig);
     test("createOut", true, "Attestation Signature parsed");
@@ -206,7 +213,7 @@ async function webAuthnDecodeCBORAttestation(aCborAttBuf, aClientDataJSON) {
     append("createOut", `R-component: ${hexEncode(r)}\n`);
     append("createOut", `S-component: ${hexEncode(s)}\n`);
 
-    const certPubKey = await importPublicKey(cert.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHexView);
+    const certPubKey = await importPublicKey(certKeyInfo.subjectPublicKey.valueBlock.valueHexView);
     const signedData = assembleRegistrationSignedData(attestation.rpIdHash, await sha256(aClientDataJSON),
                                                       attestation.attestationAuthData.credId,
                                                       attestation.publicKeyBytes);
@@ -217,33 +224,17 @@ async function webAuthnDecodeCBORAttestation(aCborAttBuf, aClientDataJSON) {
     return attestation;
   }
 
-  if (attObj.fmt == "none") {
-    if (Object.keys(attObj.attStmt).length != 0) {
-      throw new Error("\"none\" attestation must have an empty attStmt");
+  if (fmt == "none") {
+    if (attStmt.size != 0) {
+      throw new Error("none attestation must have an empty attStmt");
     }
-    append("createOut", "\n:: \"None\" Attestation Format ::\n");
-    const attestation = await webAuthnDecodeAuthDataArray(attObj.authData);
+    append("createOut", "\n:: None Attestation Format ::\n");
+    const attestation = await webAuthnDecodeAuthDataArray(authData);
     attestation.attestationObject = attObj;
     return attestation;
   }
 
-  throw new Error(`Unknown attestation format: ${attObj.fmt}`);
-}
-
-// CBOR.decode rejects trailing bytes, so find where the first item ends.
-function cborFirstItemLength(aBytes) {
-  for (let end = 1; end <= aBytes.length; end++) {
-    try {
-      CBOR.decode(getArrayBuffer(aBytes.subarray(0, end)));
-      return end;
-    } catch (e) {
-      // A RangeError means the item runs past `end`; anything else is malformed.
-      if (!(e instanceof RangeError)) {
-        throw e;
-      }
-    }
-  }
-  throw new Error("No complete CBOR item found");
+  throw new Error(`Unknown attestation format: ${fmt}`);
 }
 
 function decodeExtensions(aBytes) {
@@ -298,34 +289,34 @@ async function webAuthnDecodeAuthDataArray(aAuthData) {
   console.log(":: Attestation Data ::");
   console.log(`AAGUID: ${hexEncode(attData.aaguid)}`);
 
-  let cborPubKey = aAuthData.subarray(55 + attData.credIdLen);
+  const keyOffset = 55 + attData.credIdLen;
+  const { value: pubkeyObj, length: keyLength } = CBOR.decodeFirst(getArrayBuffer(aAuthData.subarray(keyOffset)));
   if (flags[0] & flag_ED) {
-    const keyLength = cborFirstItemLength(cborPubKey);
-    attData.extensions = decodeExtensions(cborPubKey.subarray(keyLength));
-    cborPubKey = cborPubKey.subarray(0, keyLength);
+    attData.extensions = decodeExtensions(aAuthData.subarray(keyOffset + keyLength));
+  } else if (aAuthData.length != keyOffset + keyLength) {
+    throw new Error(`Unexpected ${aAuthData.length - keyOffset - keyLength} bytes after the public key`);
   }
-  const pubkeyObj = CBOR.decode(getArrayBuffer(cborPubKey));
-  if (!(isCborMap(pubkeyObj) && cose_kty in pubkeyObj && cose_alg in pubkeyObj && cose_crv in pubkeyObj
-        && cose_crv_x in pubkeyObj && cose_crv_y in pubkeyObj)) {
+  if (!(isCborMap(pubkeyObj) && pubkeyObj.has(cose_kty) && pubkeyObj.has(cose_alg) && pubkeyObj.has(cose_crv)
+        && pubkeyObj.has(cose_crv_x) && pubkeyObj.has(cose_crv_y))) {
     throw new Error("Invalid CBOR Public Key Object");
   }
-  if (pubkeyObj[cose_kty] !== cose_kty_ec2) {
+  if (pubkeyObj.get(cose_kty) !== cose_kty_ec2) {
     throw new Error("Unexpected key type");
   }
-  if (pubkeyObj[cose_alg] !== cose_alg_ECDSA_w_SHA256) {
+  if (pubkeyObj.get(cose_alg) !== cose_alg_ECDSA_w_SHA256) {
     throw new Error("Unexpected public key algorithm");
   }
-  if (pubkeyObj[cose_crv] !== cose_crv_P256) {
+  if (pubkeyObj.get(cose_crv) !== cose_crv_P256) {
     throw new Error("Unexpected curve");
   }
 
-  const pubKeyBytes = assemblePublicKeyBytesData(pubkeyObj[cose_crv_x], pubkeyObj[cose_crv_y]);
+  const pubKeyBytes = assemblePublicKeyBytesData(pubkeyObj.get(cose_crv_x), pubkeyObj.get(cose_crv_y));
   console.log(":: CBOR Public Key Object Data ::");
-  console.log(`kty: ${pubkeyObj[cose_kty]} (EC2)`);
-  console.log(`alg: ${pubkeyObj[cose_alg]} (ES256)`);
-  console.log(`crv: ${pubkeyObj[cose_crv]} (P256)`);
-  console.log(`X: ${hexEncode(pubkeyObj[cose_crv_x])}`);
-  console.log(`Y: ${hexEncode(pubkeyObj[cose_crv_y])}`);
+  console.log(`kty: ${pubkeyObj.get(cose_kty)} (EC2)`);
+  console.log(`alg: ${pubkeyObj.get(cose_alg)} (ES256)`);
+  console.log(`crv: ${pubkeyObj.get(cose_crv)} (P256)`);
+  console.log(`X: ${hexEncode(pubkeyObj.get(cose_crv_x))}`);
+  console.log(`Y: ${hexEncode(pubkeyObj.get(cose_crv_y))}`);
   console.log(`Uncompressed (hex): ${hexEncode(pubKeyBytes)}`);
 
   return {
@@ -360,7 +351,13 @@ function derIntegerToBytes32(der, offset) {
   if (len < 1 || value.length != len) {
     throw new Error(`Invalid signature: truncated INTEGER at offset ${offset}`);
   }
-  while (value.length > 32 && value[0] == 0x00) {
+  if (value[0] & 0x80) {
+    throw new Error(`Invalid signature: negative INTEGER at offset ${offset}`);
+  }
+  if (value.length > 1 && value[0] == 0x00) {
+    if (!(value[1] & 0x80)) {
+      throw new Error(`Invalid signature: non-minimal INTEGER at offset ${offset}`);
+    }
     value = value.subarray(1);
   }
   if (value.length > 32) {
@@ -464,6 +461,8 @@ async function doWebAuthnCreate(challengeBytes) {
   }
 
   state.createRequest = createRequest;
+  state.keyHandle = null;
+  state.publicKey = null;
 
   console.log(`let createRequest = ${JSON.stringify(createRequest, jsonBytes, 2)}`);
   console.log("navigator.credentials.create({ publicKey: createRequest })");
@@ -525,7 +524,7 @@ async function doWebAuthnGet() {
   $("getOut").textContent = "";
   gResults.reset();
 
-  if (!state.createResponse) {
+  if (!state.publicKey) {
     gResults.fail();
     append("getOut", "Need to make a credential first:\n");
     return;
@@ -535,7 +534,7 @@ async function doWebAuthnGet() {
 
   const newCredential = {
     type: "public-key",
-    id: state.createResponse.rawId,
+    id: state.keyHandle,
     transports: ["usb", "nfc", "ble"],
   };
   console.log("New Credential: ", newCredential);
@@ -607,7 +606,7 @@ async function doWebAuthnGet() {
     append("getOut", `ClientData buffer: ${hexEncode(assertion.response.clientDataJSON)}\n\n`);
     append("getOut", `ClientDataHash: ${hexEncode(clientDataHash)}\n\n`);
 
-    const signedData = assembleSignedData(appParam, authData.flags, authData.counter, clientDataHash);
+    const signedData = concatBytes(assertion.response.authenticatorData, clientDataHash);
     append("getOut", `Signed Data assembled: ${hexEncode(signedData)}\n`);
     const signatureValid = await verifySignature(state.publicKey, signedData, assertion.response.signature);
     test("getOut", signatureValid, "The token signature must be valid.");
