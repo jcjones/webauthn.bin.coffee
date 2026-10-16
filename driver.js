@@ -461,6 +461,8 @@ async function doWebAuthnCreate(challengeBytes) {
   }
 
   state.createRequest = createRequest;
+  state.keyHandle = null;
+  state.publicKey = null;
 
   console.log(`let createRequest = ${JSON.stringify(createRequest, jsonBytes, 2)}`);
   console.log("navigator.credentials.create({ publicKey: createRequest })");
@@ -522,7 +524,7 @@ async function doWebAuthnGet() {
   $("getOut").textContent = "";
   gResults.reset();
 
-  if (!state.createResponse) {
+  if (!state.publicKey) {
     gResults.fail();
     append("getOut", "Need to make a credential first:\n");
     return;
@@ -532,7 +534,7 @@ async function doWebAuthnGet() {
 
   const newCredential = {
     type: "public-key",
-    id: state.createResponse.rawId,
+    id: state.keyHandle,
     transports: ["usb", "nfc", "ble"],
   };
   console.log("New Credential: ", newCredential);
