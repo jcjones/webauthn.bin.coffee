@@ -117,10 +117,6 @@ function concatBytes(...parts) {
   return out;
 }
 
-function assembleSignedData(rpIdHash, flags, counter, clientDataHash) {
-  return concatBytes(rpIdHash, flags, counter, clientDataHash);
-}
-
 function assembleRegistrationSignedData(rpIdHash, clientDataHash, credId, publicKeyBytes) {
   return concatBytes([0x00], rpIdHash, clientDataHash, credId, publicKeyBytes);
 }
@@ -204,6 +200,12 @@ async function webAuthnDecodeCBORAttestation(aCborAttBuf, aClientDataJSON) {
       append("createOut", `[NOTE] Attestation cert signature verification couldn't continue, probably because of a lack of issuer cert: ${error}\n`);
     }
 
+    const certKeyInfo = cert.subjectPublicKeyInfo;
+    if (certKeyInfo.algorithm.algorithmId != "1.2.840.10045.2.1"
+        || certKeyInfo.algorithm.algorithmParams?.valueBlock?.toString() != "1.2.840.10045.3.1.7") {
+      throw new Error("Attestation certificate key must be an EC P-256 key");
+    }
+
     state.attestationSig = sig;
     const { r, s } = parseDerSignature(sig);
     test("createOut", true, "Attestation Signature parsed");
@@ -211,7 +213,7 @@ async function webAuthnDecodeCBORAttestation(aCborAttBuf, aClientDataJSON) {
     append("createOut", `R-component: ${hexEncode(r)}\n`);
     append("createOut", `S-component: ${hexEncode(s)}\n`);
 
-    const certPubKey = await importPublicKey(cert.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHexView);
+    const certPubKey = await importPublicKey(certKeyInfo.subjectPublicKey.valueBlock.valueHexView);
     const signedData = assembleRegistrationSignedData(attestation.rpIdHash, await sha256(aClientDataJSON),
                                                       attestation.attestationAuthData.credId,
                                                       attestation.publicKeyBytes);
@@ -349,7 +351,13 @@ function derIntegerToBytes32(der, offset) {
   if (len < 1 || value.length != len) {
     throw new Error(`Invalid signature: truncated INTEGER at offset ${offset}`);
   }
-  while (value.length > 32 && value[0] == 0x00) {
+  if (value[0] & 0x80) {
+    throw new Error(`Invalid signature: negative INTEGER at offset ${offset}`);
+  }
+  if (value.length > 1 && value[0] == 0x00) {
+    if (!(value[1] & 0x80)) {
+      throw new Error(`Invalid signature: non-minimal INTEGER at offset ${offset}`);
+    }
     value = value.subarray(1);
   }
   if (value.length > 32) {
@@ -596,7 +604,7 @@ async function doWebAuthnGet() {
     append("getOut", `ClientData buffer: ${hexEncode(assertion.response.clientDataJSON)}\n\n`);
     append("getOut", `ClientDataHash: ${hexEncode(clientDataHash)}\n\n`);
 
-    const signedData = assembleSignedData(appParam, authData.flags, authData.counter, clientDataHash);
+    const signedData = concatBytes(assertion.response.authenticatorData, clientDataHash);
     append("getOut", `Signed Data assembled: ${hexEncode(signedData)}\n`);
     const signatureValid = await verifySignature(state.publicKey, signedData, assertion.response.signature);
     test("getOut", signatureValid, "The token signature must be valid.");
