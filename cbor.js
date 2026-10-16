@@ -28,9 +28,15 @@ const POW_2_53 = 9007199254740992;
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
-// Decodes exactly one CBOR item from an ArrayBuffer. Throws a RangeError when
-// the input is truncated, and an Error for any other malformed input.
+// Decodes exactly one CBOR item from an ArrayBuffer.
 export function decode(data) {
+  const { value, length } = decodeFirst(data);
+  if (length !== data.byteLength)
+    throw new Error("Remaining bytes");
+  return value;
+}
+
+export function decodeFirst(data) {
   const dataView = new DataView(data);
   let offset = 0;
 
@@ -99,18 +105,15 @@ export function decode(data) {
   const readUtf8String = length => utf8Decoder.decode(readBytes(length));
 
   function readMap(length) {
-    const map = {};
+    const map = new Map();
     for (let i = 0; i < length || (length < 0 && !readBreak()); ++i) {
+      const keyType = dataView.getUint8(offset) >> 5;
+      if (keyType !== 0 && keyType !== 1 && keyType !== 3)
+        throw new Error("Unsupported map key type: " + keyType);
       const key = decodeItem();
-      if (Object.hasOwn(map, key))
+      if (map.has(key))
         throw new Error("Duplicate map key: " + key);
-      // Plain assignment would let a "__proto__" key replace the prototype.
-      Object.defineProperty(map, key, {
-        value: decodeItem(),
-        writable: true,
-        enumerable: true,
-        configurable: true
-      });
+      map.set(key, decodeItem());
     }
     return map;
   }
@@ -176,6 +179,8 @@ export function decode(data) {
         // Tags are not interpreted; return the tagged item itself.
         return decodeItem();
       case 7:
+        if (additionalInformation === 24 && length < 32)
+          throw new Error("Invalid simple value");
         switch (length) {
           case 20: return false;
           case 21: return true;
@@ -185,8 +190,6 @@ export function decode(data) {
     }
   }
 
-  const ret = decodeItem();
-  if (offset !== data.byteLength)
-    throw new Error("Remaining bytes");
-  return ret;
+  const value = decodeItem();
+  return { value, length: offset };
 }
