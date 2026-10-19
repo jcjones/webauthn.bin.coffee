@@ -6,6 +6,7 @@ import * as CBOR from "./cbor.js";
 import { Certificate, fromBER } from "./assets/pkijs.js";
 
 const flag_TUP = 0x01;
+const flag_UV = 0x04;
 const flag_AT = 0x40;
 const flag_ED = 0x80;
 
@@ -492,6 +493,7 @@ async function doWebAuthnCreate(challengeBytes) {
     append("createOut", "\n:: CBOR Attestation Object Data ::\n");
     append("createOut", `RP ID Hash: ${hexEncode(attestation.rpIdHash)}\n`);
     append("createOut", `Counter: ${hexEncode(attestation.counter)} Flags: ${flags}\n`);
+    append("createOut", `User verified: ${flags & flag_UV ? "yes" : "no"}\n`);
     append("createOut", `AAGUID: ${hexEncode(attestation.attestationAuthData.aaguid)}\n`);
 
     append("createOut", "\n:: Client Data Information ::\n");
@@ -585,12 +587,14 @@ async function doWebAuthnGet() {
     if (!testEqual("getOut", flags & flag_TUP, flag_TUP, "User presence flag must be set")) {
       throw new Error("Assertion's user presence byte not set correctly.");
     }
+    testEqual("getOut", flags & flag_AT, 0, "Attested credential data flag must not be set");
 
     testEqual("getOut", authData.counter.byteLength, 4, "Counter must be 4 bytes");
 
     append("getOut", "\n:: CBOR Attestation Object Data ::\n");
     append("getOut", `RP ID Hash: ${hexEncode(authData.rpIdHash)}\n`);
     append("getOut", `Counter: ${hexEncode(authData.counter)} Flags: ${flags}\n`);
+    append("getOut", `User verified: ${flags & flag_UV ? "yes" : "no"}\n`);
     append("getOut", "\n");
 
     let hashedId = rpid;
