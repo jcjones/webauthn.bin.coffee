@@ -138,6 +138,7 @@ const state = window.state = {
   createResponse: null,
   publicKey: null,
   keyHandle: null,
+  transports: null,
 };
 
 function isCborMap(aValue) {
@@ -430,8 +431,8 @@ async function doWebAuthnCreate(challengeBytes) {
     },
     user: {
       id: string2buffer("1098237235409872"),
-      name: "john.p.smith@example.com",
-      displayName: "John P. Smith",
+      name: "jacqueline.p.smith@example.com",
+      displayName: "Jacqueline P. Smith",
     },
 
     pubKeyCredParams: [
@@ -442,7 +443,6 @@ async function doWebAuthnCreate(challengeBytes) {
     ],
 
     authenticatorSelection: {
-      authenticatorAttachment: "cross-platform",
       residentKey: "discouraged",
       requireResidentKey: false,
       userVerification: "preferred",
@@ -461,9 +461,14 @@ async function doWebAuthnCreate(challengeBytes) {
     createRequest.attestation = $("attestationType").value;
   }
 
+  if ($("attachmentType").value) {
+    createRequest.authenticatorSelection.authenticatorAttachment = $("attachmentType").value;
+  }
+
   state.createRequest = createRequest;
   state.keyHandle = null;
   state.publicKey = null;
+  state.transports = null;
 
   console.log(`let createRequest = ${JSON.stringify(createRequest, jsonBytes, 2)}`);
   console.log("navigator.credentials.create({ publicKey: createRequest })");
@@ -485,6 +490,11 @@ async function doWebAuthnCreate(challengeBytes) {
     }
     testEqual("createOut", hexEncode(attestation.attestationAuthData.credId), hexEncode(credential.rawId), "Credential ID from CBOR and Raw ID match");
     state.keyHandle = credential.rawId;
+    if (credential.response.getTransports) {
+      state.transports = credential.response.getTransports();
+      append("createOut", `Transports: ${state.transports.join(", ") || "(none reported)"}\n`);
+    }
+    append("createOut", `Authenticator attachment: ${credential.authenticatorAttachment ?? "(not reported)"}\n`);
     append("createOut", `Keypair Identifier: ${hexEncode(state.keyHandle)}\n`);
     append("createOut", `Public Key: ${hexEncode(attestation.publicKeyBytes)}\n`);
 
@@ -532,13 +542,15 @@ async function doWebAuthnGet() {
     return;
   }
 
-  $("getOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch it, or plug it in)\n\n";
+  $("getOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch your security key, or follow your browser's prompt)\n\n";
 
   const newCredential = {
     type: "public-key",
     id: state.keyHandle,
-    transports: ["usb", "nfc", "ble"],
   };
+  if (state.transports?.length) {
+    newCredential.transports = state.transports;
+  }
   console.log("New Credential: ", newCredential);
 
   const challengeBytes = crypto.getRandomValues(new Uint8Array(16));
@@ -634,7 +646,7 @@ if (!window.isSecureContext) {
 }
 
 $("createButton").addEventListener("click", () => {
-  $("createOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch it, or plug it in)\n\n";
+  $("createOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch your security key, or follow your browser's prompt)\n\n";
   gResults.reset();
 
   const challengeBytes = crypto.getRandomValues(new Uint8Array(16));
