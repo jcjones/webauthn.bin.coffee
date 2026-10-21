@@ -16,10 +16,12 @@ body {
   text-align: left;
   font-size: 10pt;
   font-family: system-ui, Helvetica, sans-serif;
+  overflow-wrap: break-word;
 }
 
 #container {
-  width: 600px;
+  max-width: 600px;
+  padding: 0 8px;
   margin: 0 auto;
   margin-top: 1em;
 }
@@ -61,10 +63,14 @@ button:active {
 
 input {
   margin-bottom: 20px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 pre {
   width: 560px;
+  max-width: 100%;
+  box-sizing: border-box;
   height: 20em;
   overflow: auto;
   background-color: #eee;
