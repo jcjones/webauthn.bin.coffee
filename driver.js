@@ -55,8 +55,9 @@ function test(id, passed, text) {
 }
 
 function testEqual(id, val1, val2, msg) {
-  const result = (val1 == val2);
-  return test(id, result, `${msg}: ${val1}${result ? " == " : " != "}${val2}`);
+  const result = (val1 === val2);
+  const show = val => typeof val === "string" ? val : JSON.stringify(val);
+  return test(id, result, `${msg}: ${show(val1)}${result ? " == " : " != "}${show(val2)}`);
 }
 
 function todo(id, text) {
