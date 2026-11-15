@@ -138,6 +138,13 @@ pre {
       <option value="platform">Platform</option>
       <option value="cross-platform">Cross-platform</option>
     </select>
+    <p>Authenticator hint, sent with both Create and Get. (WebAuthn Level 3 hints tell the browser which kind of authenticator to offer first. "Security key" goes straight to a USB key, including an NFC key behind a bridge. Browsers that don't support hints ignore it.)</p>
+    <select id="hintType">
+      <option value="">--Unspecified--</option>
+      <option value="security-key">Security key</option>
+      <option value="client-device">Client device</option>
+      <option value="hybrid">Hybrid (phone)</option>
+    </select>
     <p>FIDO AppID to use. (If set, Get Assertion will send it with the AppID compatibility extension. "<code>https://bin.coffee/AppId</code>" and "<code>https://webauthn.bin.coffee/</code>" are valid options for Firefox. Only "<code>https://webauthn.bin.coffee/</code>" is valid for Chrome.)</p>
     <input id="appIdText" type="text" size="50"/>
     <p>Should this page aggressively loop forever on an operation? (Test denial-of-service to WebAuthn)</p>

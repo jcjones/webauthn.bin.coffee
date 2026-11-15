@@ -21,6 +21,13 @@ const cose_crv_y = -3;
 
 const $ = id => document.getElementById(id);
 
+// Adds the chosen WebAuthn Level 3 hint to create or get options.
+function applyHint(options) {
+  if ($("hintType").value) {
+    options.hints = [$("hintType").value];
+  }
+}
+
 class ResultTracker {
   failures = 0;
   todos = 0;
@@ -466,6 +473,8 @@ async function doWebAuthnCreate(challengeBytes) {
     createRequest.authenticatorSelection.authenticatorAttachment = $("attachmentType").value;
   }
 
+  applyHint(createRequest);
+
   state.createRequest = createRequest;
   state.keyHandle = null;
   state.publicKey = null;
@@ -568,6 +577,8 @@ async function doWebAuthnGet() {
   if (appId) {
     publicKeyCredentialRequestOptions.extensions.appid = appId;
   }
+
+  applyHint(publicKeyCredentialRequestOptions);
 
   let rpid = window.location.hostname;
   if ($("rpIdText").value) {
