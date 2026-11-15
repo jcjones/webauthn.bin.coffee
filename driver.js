@@ -21,6 +21,13 @@ const cose_crv_y = -3;
 
 const $ = id => document.getElementById(id);
 
+// Desktop Linux, where browsers can't use NFC readers on their own.
+// Android and ChromeOS also report Linux in navigator.platform.
+function isDesktopLinux() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  return /linux/i.test(platform) && !/\b(?:Android|CrOS)\b/.test(navigator.userAgent);
+}
+
 // Adds the chosen WebAuthn Level 3 hint to create or get options.
 function applyHint(options) {
   if ($("hintType").value) {
@@ -428,6 +435,10 @@ function reportError(id, aErr) {
   } else {
     gResults.fail();
     append(id, `Got error:\n${aErr}\n\n`);
+    if (aErr?.name == "NotAllowedError" && isDesktopLinux()) {
+      $("nfcHelp").open = true;
+      append(id, "[NOTE] If you were holding a key on a USB NFC reader, your browser can't use the reader on its own. See \"Using an NFC reader on Linux\" near the top of the page.\n\n");
+    }
   }
 }
 
@@ -651,6 +662,10 @@ async function doWebAuthnGet() {
 if (!window.PublicKeyCredential) {
   $("error").textContent = "Web Authentication API not found";
   document.querySelectorAll("button").forEach(button => button.classList.add("inactive"));
+}
+
+if (isDesktopLinux()) {
+  $("nfcHelp").open = true;
 }
 
 if (!window.isSecureContext) {
