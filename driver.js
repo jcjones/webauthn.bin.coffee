@@ -21,6 +21,8 @@ const cose_crv_y = -3;
 
 const $ = id => document.getElementById(id);
 
+const contactingMessage = "Contacting token... please perform your verification gesture\n\n";
+
 // Desktop Linux, where browsers can't use NFC readers on their own.
 // Android and ChromeOS also report Linux in navigator.platform.
 function isDesktopLinux() {
@@ -563,7 +565,7 @@ async function doWebAuthnGet() {
     return;
   }
 
-  $("getOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch your security key, or follow your browser's prompt)\n\n";
+  $("getOut").textContent = contactingMessage;
 
   const newCredential = {
     type: "public-key",
@@ -673,7 +675,7 @@ if (!window.isSecureContext) {
 }
 
 $("createButton").addEventListener("click", () => {
-  $("createOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch your security key, or follow your browser's prompt)\n\n";
+  $("createOut").textContent = contactingMessage;
   gResults.reset();
 
   const challengeBytes = crypto.getRandomValues(new Uint8Array(16));
