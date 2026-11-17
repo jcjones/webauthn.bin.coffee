@@ -21,6 +21,22 @@ const cose_crv_y = -3;
 
 const $ = id => document.getElementById(id);
 
+const contactingMessage = "Contacting token... please perform your verification gesture\n\n";
+
+// Desktop Linux, where browsers can't use NFC readers on their own.
+// Android and ChromeOS also report Linux in navigator.platform.
+function isDesktopLinux() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  return /linux/i.test(platform) && !/\b(?:Android|CrOS)\b/.test(navigator.userAgent);
+}
+
+// Adds the chosen WebAuthn Level 3 hint to create or get options.
+function applyHint(options) {
+  if ($("hintType").value) {
+    options.hints = [$("hintType").value];
+  }
+}
+
 class ResultTracker {
   failures = 0;
   todos = 0;
@@ -421,6 +437,10 @@ function reportError(id, aErr) {
   } else {
     gResults.fail();
     append(id, `Got error:\n${aErr}\n\n`);
+    if (aErr?.name == "NotAllowedError" && isDesktopLinux()) {
+      $("nfcHelp").open = true;
+      append(id, "[NOTE] If you were holding a key on a USB NFC reader, your browser can't use the reader on its own. See \"Using an NFC reader on Linux\" near the top of the page.\n\n");
+    }
   }
 }
 
@@ -465,6 +485,8 @@ async function doWebAuthnCreate(challengeBytes) {
   if ($("attachmentType").value) {
     createRequest.authenticatorSelection.authenticatorAttachment = $("attachmentType").value;
   }
+
+  applyHint(createRequest);
 
   state.createRequest = createRequest;
   state.keyHandle = null;
@@ -543,7 +565,7 @@ async function doWebAuthnGet() {
     return;
   }
 
-  $("getOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch your security key, or follow your browser's prompt)\n\n";
+  $("getOut").textContent = contactingMessage;
 
   const newCredential = {
     type: "public-key",
@@ -568,6 +590,8 @@ async function doWebAuthnGet() {
   if (appId) {
     publicKeyCredentialRequestOptions.extensions.appid = appId;
   }
+
+  applyHint(publicKeyCredentialRequestOptions);
 
   let rpid = window.location.hostname;
   if ($("rpIdText").value) {
@@ -642,12 +666,16 @@ if (!window.PublicKeyCredential) {
   document.querySelectorAll("button").forEach(button => button.classList.add("inactive"));
 }
 
+if (isDesktopLinux()) {
+  $("nfcHelp").open = true;
+}
+
 if (!window.isSecureContext) {
   $("error").textContent = "Loaded outside of a secure context. It shouldn't work.";
 }
 
 $("createButton").addEventListener("click", () => {
-  $("createOut").textContent = "Contacting token... please perform your verification gesture (e.g., touch your security key, or follow your browser's prompt)\n\n";
+  $("createOut").textContent = contactingMessage;
   gResults.reset();
 
   const challengeBytes = crypto.getRandomValues(new Uint8Array(16));

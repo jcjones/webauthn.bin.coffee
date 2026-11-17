@@ -49,6 +49,14 @@ body {
   font-style: italic;
 }
 
+summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+details p, details ol {
+  margin-top: 0.5em;
+}
+
 button {
   background-color: black;
   color: white;
@@ -107,6 +115,19 @@ pre {
  <div class="row">
   <p>This page works in Firefox 74, Chrome or Edge 91, or Safari 14.1 and later.</p>
  </div>
+ <div class="row">
+  <details id="nfcHelp">
+   <summary>Using an NFC reader on Linux</summary>
+   <p>Linux browsers can't use USB NFC readers, so tapping a key does nothing. To test one anyway, use a bridge that makes the reader look like a USB key:</p>
+   <ol>
+    <li>Install and start your distro's pcscd and CCID driver packages.</li>
+    <li>If pcscd doesn't see your reader (common with PN533 readers like the ACR122U), blacklist the <code>pn533_usb</code> kernel module and reboot.</li>
+    <li>Run <a href="https://github.com/BryanJacobs/fido2-hid-bridge" target="_blank" rel="noopener">fido2-hid-bridge</a> as root and leave it running.</li>
+    <li>In the Advanced box at the bottom of the page, set "Authenticator hint" to "Security key" so the browser asks for the key straight away.</li>
+    <li>Click Create Credential and hold the key on the reader until the result appears.</li>
+   </ol>
+  </details>
+ </div>
 
  <div class="row">
   <p id="error"></p>
@@ -137,6 +158,13 @@ pre {
       <option value="">--Unspecified--</option>
       <option value="platform">Platform</option>
       <option value="cross-platform">Cross-platform</option>
+    </select>
+    <p>Authenticator hint, sent with both Create and Get. (WebAuthn Level 3 hints tell the browser which kind of authenticator to offer first. "Security key" goes straight to a USB key, including an NFC key behind a bridge. Browsers that don't support hints ignore it.)</p>
+    <select id="hintType">
+      <option value="">--Unspecified--</option>
+      <option value="security-key">Security key</option>
+      <option value="client-device">Client device</option>
+      <option value="hybrid">Hybrid (phone)</option>
     </select>
     <p>FIDO AppID to use. (If set, Get Assertion will send it with the AppID compatibility extension. "<code>https://bin.coffee/AppId</code>" and "<code>https://webauthn.bin.coffee/</code>" are valid options for Firefox. Only "<code>https://webauthn.bin.coffee/</code>" is valid for Chrome.)</p>
     <input id="appIdText" type="text" size="50"/>
